@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B站活动筛选工具 - 投稿活动一键匹配</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f4f5f7;
+    color: #18191c;
+    min-height: 100vh;
+  }
+
+  /* 顶部导航 */
+  .header {
+    background: linear-gradient(135deg, #fb7299 0%, #ff9eb5 100%);
+    color: #fff;
+    padding: 24px 32px;
+    box-shadow: 0 2px 8px rgba(251,114,153,0.2);
+  }
+  .header h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+  .header p { font-size: 13px; opacity: 0.9; }
+  .header .stats { margin-top: 12px; font-size: 13px; opacity: 0.95; }
+  .header .stats span { margin-right: 20px; }
+
+  /* 主体容器 */
+  .container { max-width: 1400px; margin: 0 auto; padding: 20px 32px 40px; }
+
+  /* 筛选面板 */
+  .filter-panel {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .filter-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .filter-row:last-child { margin-bottom: 0; }
+  .filter-label {
+    font-size: 13px;
+    color: #61666d;
+    font-weight: 600;
+    min-width: 60px;
+    flex-shrink: 0;
+  }
+  .filter-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .filter-btn {
+    padding: 5px 14px;
+    border: 1px solid #e3e5e7;
+    border-radius: 16px;
+    background: #fff;
+    font-size: 13px;
+    color: #61666d;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .filter-btn:hover { border-color: #fb7299; color: #fb7299; }
+  .filter-btn.active {
+    background: #fb7299;
+    border-color: #fb7299;
+    color: #fff;
+  }
+
+  /* 搜索和排序行 */
+  .search-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .search-box {
+    flex: 1;
+    min-width: 240px;
+    position: relative;
+  }
+  .search-box input {
+    width: 100%;
+    padding: 9px 14px 9px 36px;
+    border: 1px solid #e3e5e7;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-box input:focus { border-color: #fb7299; }
+  .search-box::before {
+    content: "🔍";
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+  }
+  .sort-select {
+    padding: 9px 14px;
+    border: 1px solid #e3e5e7;
+    border-radius: 8px;
+    font-size: 14px;
+    background: #fff;
+    cursor: pointer;
+    outline: none;
+  }
+  .sort-select:focus { border-color: #fb7299; }
+
+  /* 适合度输入 */
+  .suitability-box {
+    background: linear-gradient(135deg, #fff5f7 0%, #fff 100%);
+    border: 1px solid #ffd6e0;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+  }
+  .suitability-box label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fb7299;
+    display: block;
+    margin-bottom: 8px;
+  }
+  .suitability-box input {
+    width: 100%;
+    padding: 9px 14px;
+    border: 1px solid #ffd6e0;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+    background: #fff;
+  }
+  .suitability-box input:focus { border-color: #fb7299; }
+  .suitability-box .hint {
+    font-size: 12px;
+    color: #9499a0;
+    margin-top: 6px;
+  }
+
+  /* 结果统计 */
+  .result-count {
+    font-size: 13px;
+    color: #61666d;
+    margin-bottom: 14px;
+  }
+  .result-count strong { color: #fb7299; font-size: 16px; }
+
+  /* 活动卡片网格 */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+  .activity-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    cursor: pointer;
+    transition: all 0.25s;
+    border: 2px solid transparent;
+    position: relative;
+    overflow: hidden;
+  }
+  .activity-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    border-color: #fb7299;
+  }
+  .activity-card.high-match {
+    border-color: #52c41a;
+    background: linear-gradient(135deg, #f6ffed 0%, #fff 60%);
+  }
+  .activity-card.ending-soon::after {
+    content: "即将截止";
+    position: absolute;
+    top: 12px;
+    right: -28px;
+    background: #ff4d4f;
+    color: #fff;
+    font-size: 11px;
+    padding: 3px 32px;
+    transform: rotate(45deg);
+    font-weight: 600;
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+  .card-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #18191c;
+    line-height: 1.4;
+    flex: 1;
+    padding-right: 8px;
+  }
+  .card-category {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .cat-综合 { background: #e6f7ff; color: #1890ff; }
+  .cat-游戏 { background: #f0f5ff; color: #2f54eb; }
+  .cat-影视 { background: #fff7e6; color: #fa8c16; }
+  .cat-音乐 { background: #f9f0ff; color: #722ed1; }
+  .cat-知识 { background: #e6fffb; color: #13c2c2; }
+  .cat-动画 { background: #fff0f6; color: #eb2f96; }
+  .cat-亲子 { background: #fcffe6; color: #a0d911; }
+  .cat-科技 { background: #f0f0f0; color: #595959; }
+  .cat-鬼畜 { background: #fff1f0; color: #f5222d; }
+  .cat-品牌 { background: #fff2e8; color: #d46b08; }
+
+  .card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .card-tag {
+    padding: 2px 8px;
+    background: #f4f5f7;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #61666d;
+  }
+  .card-info {
+    font-size: 13px;
+    color: #61666d;
+    line-height: 1.8;
+  }
+  .card-info .row { display: flex; align-items: center; gap: 6px; }
+  .card-info .icon { font-size: 14px; }
+  .card-reward {
+    margin-top: 10px;
+    padding: 8px 12px;
+    background: #fffbe6;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #ad8b00;
+    line-height: 1.5;
+  }
+  .card-match-badge {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .match-high { background: #f6ffed; color: #52c41a; border: 1px solid #b7eb8f; }
+  .match-medium { background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; }
+  .match-low { background: #f5f5f5; color: #8c8c8c; border: 1px solid #d9d9d9; }
+
+  .card-footer {
+    margin-top: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+  }
+  .days-left { font-weight: 600; }
+  .days-urgent { color: #ff4d4f; }
+  .days-normal { color: #52c41a; }
+  .days-long { color: #1890ff; }
+  .card-link { color: #fb7299; text-decoration: none; font-weight: 500; }
+  .card-link:hover { text-decoration: underline; }
+
+  /* 空状态 */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #9499a0;
+  }
+  .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 15px; }
+
+  /* 详情弹窗 */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #fff;
+    border-radius: 16px;
+    width: 100%;
+    max-width: 640px;
+    max-height: 85vh;
+    overflow-y: auto;
+    position: relative;
+    animation: modalIn 0.25s ease;
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .modal-close {
+    position: absolute;
+    top: 16px; right: 16px;
+    width: 32px; height: 32px;
+    border: none;
+    background: #f4f5f7;
+    border-radius: 50%;
+    font-size: 18px;
+    cursor: pointer;
+    color: #61666d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  .modal-close:hover { background: #e3e5e7; }
+  .modal-header {
+    padding: 28px 28px 20px;
+    background: linear-gradient(135deg, #fff5f7 0%, #fff 100%);
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .modal-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    padding-right: 40px;
+  }
+  .modal-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .modal-body { padding: 24px 28px 28px; }
+  .modal-section { margin-bottom: 20px; }
+  .modal-section:last-child { margin-bottom: 0; }
+  .modal-section h3 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #18191c;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .modal-section p, .modal-section li {
+    font-size: 14px;
+    color: #61666d;
+    line-height: 1.7;
+  }
+  .modal-section ul { padding-left: 20px; }
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .info-item {
+    padding: 12px 14px;
+    background: #f9f9fa;
+    border-radius: 8px;
+  }
+  .info-item .label { font-size: 12px; color: #9499a0; margin-bottom: 4px; }
+  .info-item .value { font-size: 14px; font-weight: 600; color: #18191c; }
+  .submit-guide {
+    background: #e6f7ff;
+    border-left: 3px solid #1890ff;
+    padding: 14px 16px;
+    border-radius: 0 8px 8px 0;
+    font-size: 13px;
+    color: #0050b3;
+    line-height: 1.7;
+  }
+  .reward-box {
+    background: #fffbe6;
+    border-left: 3px solid #faad14;
+    padding: 14px 16px;
+    border-radius: 0 8px 8px 0;
+    font-size: 13px;
+    color: #ad6800;
+    line-height: 1.7;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+  }
+  .btn {
+    flex: 1;
+    padding: 11px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: #fb7299;
+    color: #fff;
+  }
+  .btn-primary:hover { background: #f55d8a; }
+  .btn-secondary {
+    background: #f4f5f7;
+    color: #61666d;
+  }
+  .btn-secondary:hover { background: #e3e5e7; }
+
+  /* 页脚 */
+  .footer {
+    text-align: center;
+    padding: 30px 20px;
+    font-size: 12px;
+    color: #9499a0;
+  }
+  .footer a { color: #fb7299; text-decoration: none; }
+
+  /* 响应式 */
+  @media (max-width: 768px) {
+    .header { padding: 20px 16px; }
+    .container { padding: 16px; }
+    .filter-panel { padding: 16px; }
+    .card-grid { grid-template-columns: 1fr; }
+    .info-grid { grid-template-columns: 1fr; }
+    .modal-header, .modal-body { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🎬 B站活动筛选工具</h1>
+  <p>一键匹配适合你的投稿活动，流量奖金不错过</p>
+  <div class="stats">
+    <span>📊 共 <strong id="totalCount">0</strong> 个活动</span>
+    <span>🔥 进行中 <strong id="activeCount">0</strong> 个</span>
+    <span>⏰ 本周截止 <strong id="endingCount">0</strong> 个</span>
+    <span>📅 数据更新：2026-10-01</span>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- 适合度推荐 -->
+  <div class="suitability-box">
+    <label>✨ 我的视频类型（自动匹配适合的活动）</label>
+    <input type="text" id="suitabilityInput" placeholder="例如：影视解说、生活vlog、美食制作、游戏攻略、知识科普、音乐剪辑..." />
+    <div class="hint">输入你的视频主题/类型，系统会自动计算每个活动的匹配度，绿色边框 = 高度匹配</div>
+  </div>
+
+  <!-- 筛选面板 -->
+  <div class="filter-panel">
+    <div class="filter-row">
+      <span class="filter-label">分类</span>
+      <div class="filter-btns" id="categoryFilters"></div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">剩余时间</span>
+      <div class="filter-btns" id="timeFilters">
+        <span class="filter-btn active" data-time="all">全部</span>
+        <span class="filter-btn" data-time="week">本周截止(≤7天)</span>
+        <span class="filter-btn" data-time="month">本月截止(≤30天)</span>
+        <span class="filter-btn" data-time="long">长期(>30天)</span>
+      </div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">奖励类型</span>
+      <div class="filter-btns" id="rewardFilters">
+        <span class="filter-btn active" data-reward="all">全部</span>
+        <span class="filter-btn" data-reward="现金瓜分">现金瓜分</span>
+        <span class="filter-btn" data-reward="固定奖金">固定奖金</span>
+        <span class="filter-btn" data-reward="流量扶持">流量扶持</span>
+        <span class="filter-btn" data-reward="游戏道具">游戏道具</span>
+        <span class="filter-btn" data-reward="周边抽奖">周边抽奖</span>
+      </div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label">参赛门槛</span>
+      <div class="filter-btns" id="difficultyFilters">
+        <span class="filter-btn active" data-diff="all">全部</span>
+        <span class="filter-btn" data-diff="低">低（投稿即参与）</span>
+        <span class="filter-btn" data-diff="中">中（有内容要求）</span>
+        <span class="filter-btn" data-diff="高">高（需特定技能）</span>
+      </div>
+    </div>
+    <div class="search-row">
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="搜索活动名称、标签、关键词..." />
+      </div>
+      <select class="sort-select" id="sortSelect">
+        <option value="days-asc">按截止时间（近→远）</option>
+        <option value="days-desc">按截止时间（远→近）</option>
+        <option value="match-desc">按匹配度（高→低）</option>
+        <option value="reward">按奖励丰厚程度</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- 结果统计 -->
+  <div class="result-count">
+    找到 <strong id="resultCount">0</strong> 个匹配活动
+  </div>
+
+  <!-- 活动卡片 -->
+  <div class="card-grid" id="cardGrid"></div>
+
+  <!-- 空状态 -->
+  <div class="empty-state" id="emptyState" style="display:none;">
+    <div class="icon">🔍</div>
+    <p>没有找到符合条件的活动，试试调整筛选条件</p>
+  </div>
+
+</div>
+
+<!-- 详情弹窗 -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <div class="modal-header">
+      <div class="modal-title" id="modalTitle"></div>
+      <div class="modal-tags" id="modalTags"></div>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<div class="footer">
+  <p>数据来源：<a href="https://www.bilibili.com/blackboard/era/reward-activity-list-page.html#/list" target="_blank">B站有奖活动中心</a> | 手动维护，建议定期更新 data.js</p>
+</div>
+
+<script src="data.js"></script>
+<script>
+// ========== 状态管理 ==========
+const state = {
+  category: 'all',
+  time: 'all',
+  reward: 'all',
+  difficulty: 'all',
+  search: '',
+  sort: 'days-asc',
+  suitability: ''
+};
+
+const TODAY = new Date('2026-10-01');
+
+// ========== 工具函数 ==========
+function daysLeft(endDate) {
+  const end = new Date(endDate);
+  const diff = Math.ceil((end - TODAY) / (1000 * 60 * 60 * 24));
+  return diff;
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  return `${d.getMonth()+1}月${d.getDate()}日`;
+}
+
+// 计算匹配度
+function calcMatch(activity, userInput) {
+  if (!userInput || !userInput.trim()) return null;
+  const input = userInput.toLowerCase().trim();
+  const keywords = input.split(/[\s,，、/]+/).filter(k => k.length >= 1);
+  let score = 0;
+  let maxScore = 0;
+
+  // 匹配标题
+  const title = activity.title.toLowerCase();
+  // 匹配标签
+  const tags = activity.tags.map(t => t.toLowerCase());
+  // 匹配适合类型
+  const suitable = activity.suitableFor.map(s => s.toLowerCase());
+  // 匹配描述
+  const desc = activity.desc.toLowerCase();
+
+  keywords.forEach(kw => {
+    maxScore += 29; // 每个关键词最大可能得分：标题10 + 标签7 + 适合类型8 + 描述4
+    if (title.includes(kw)) score += 10;
+    if (tags.some(t => t.includes(kw) || kw.includes(t))) score += 7;
+    if (suitable.some(s => s.includes(kw) || kw.includes(s))) score += 8;
+    if (desc.includes(kw)) score += 4;
+  });
+
+  return maxScore > 0 ? Math.min(100, Math.round((score / maxScore) * 100)) : 0;
+}
+
+function getMatchLevel(score) {
+  if (score === null) return null;
+  if (score >= 50) return 'high';
+  if (score >= 25) return 'medium';
+  return 'low';
+}
+
+function getMatchText(score) {
+  if (score === null) return '';
+  if (score >= 50) return `⭐ 高度匹配 ${score}%`;
+  if (score >= 25) return `🔹 中度匹配 ${score}%`;
+  return `匹配度 ${score}%`;
+}
+
+// 奖励丰厚程度排序权重
+function getRewardWeight(activity) {
+  const weights = {
+    '固定奖金': 5,
+    '现金瓜分': 4,
+    '混合': 3,
+    '流量扶持': 2,
+    '游戏道具': 1,
+    '周边抽奖': 1
+  };
+  return weights[activity.rewardType] || 0;
+}
+
+// ========== 筛选逻辑 ==========
+function filterActivities() {
+  let list = [...ACTIVITIES];
+
+  // 分类筛选
+  if (state.category !== 'all') {
+    list = list.filter(a => a.category === state.category);
+  }
+
+  // 时间筛选
+  if (state.time !== 'all') {
+    list = list.filter(a => {
+      const days = daysLeft(a.endDate);
+      if (state.time === 'week') return days >= 0 && days <= 7;
+      if (state.time === 'month') return days >= 0 && days <= 30;
+      if (state.time === 'long') return days > 30;
+      return true;
+    });
+  }
+
+  // 奖励类型筛选
+  if (state.reward !== 'all') {
+    list = list.filter(a => a.rewardType === state.reward);
+  }
+
+  // 门槛筛选
+  if (state.difficulty !== 'all') {
+    list = list.filter(a => a.difficulty === state.difficulty);
+  }
+
+  // 搜索
+  if (state.search) {
+    const kw = state.search.toLowerCase();
+    list = list.filter(a =>
+      a.title.toLowerCase().includes(kw) ||
+      a.tags.some(t => t.toLowerCase().includes(kw)) ||
+      a.desc.toLowerCase().includes(kw) ||
+      a.suitableFor.some(s => s.toLowerCase().includes(kw))
+    );
+  }
+
+  // 排除已结束
+  list = list.filter(a => daysLeft(a.endDate) >= -1);
+
+  // 排序
+  if (state.sort === 'days-asc') {
+    list.sort((a, b) => daysLeft(a.endDate) - daysLeft(b.endDate));
+  } else if (state.sort === 'days-desc') {
+    list.sort((a, b) => daysLeft(b.endDate) - daysLeft(a.endDate));
+  } else if (state.sort === 'match-desc') {
+    list.sort((a, b) => {
+      const ma = calcMatch(a, state.suitability) || 0;
+      const mb = calcMatch(b, state.suitability) || 0;
+      return mb - ma;
+    });
+  } else if (state.sort === 'reward') {
+    list.sort((a, b) => getRewardWeight(b) - getRewardWeight(a));
+  }
+
+  return list;
+}
+
+// ========== 渲染 ==========
+function renderCategoryFilters() {
+  const categories = ['all', ...new Set(ACTIVITIES.map(a => a.category))];
+  const container = document.getElementById('categoryFilters');
+  container.innerHTML = categories.map(cat => {
+    const label = cat === 'all' ? '全部' : cat;
+    const count = cat === 'all' ? ACTIVITIES.length : ACTIVITIES.filter(a => a.category === cat).length;
+    return `<span class="filter-btn ${state.category === cat ? 'active' : ''}" data-cat="${cat}">${label}(${count})</span>`;
+  }).join('');
+
+  container.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.category = btn.dataset.cat;
+      renderCategoryFilters();
+      renderCards();
+    });
+  });
+}
+
+function renderCards() {
+  const list = filterActivities();
+  const grid = document.getElementById('cardGrid');
+  const empty = document.getElementById('emptyState');
+  document.getElementById('resultCount').textContent = list.length;
+
+  if (list.length === 0) {
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  grid.innerHTML = list.map(a => {
+    const days = daysLeft(a.endDate);
+    const match = calcMatch(a, state.suitability);
+    const matchLevel = getMatchLevel(match);
+    const isEndingSoon = days >= 0 && days <= 7;
+    const daysClass = days <= 7 ? 'days-urgent' : days <= 30 ? 'days-normal' : 'days-long';
+    const daysText = days < 0 ? '已结束' : days === 0 ? '今天截止' : `剩余${days}天`;
+
+    return `
+      <div class="activity-card ${matchLevel === 'high' ? 'high-match' : ''} ${isEndingSoon ? 'ending-soon' : ''}" onclick="openModal(${a.id})">
+        <div class="card-header">
+          <div class="card-title">${a.title}</div>
+          <span class="card-category cat-${a.category}">${a.category}</span>
+        </div>
+        <div class="card-tags">
+          ${a.tags.map(t => `<span class="card-tag">${t}</span>`).join('')}
+        </div>
+        <div class="card-info">
+          <div class="row"><span class="icon">📅</span> ${formatDate(a.startDate)} - ${formatDate(a.endDate)}</div>
+          <div class="row"><span class="icon">🏷️</span> 投稿话题：${a.submitTag}</div>
+          <div class="row"><span class="icon">📂</span> 投稿分区：${a.submitZone}</div>
+        </div>
+        <div class="card-reward">
+          💰 ${a.rewardType}：${a.rewardDesc}
+        </div>
+        ${match !== null ? `<span class="card-match-badge match-${matchLevel}">${getMatchText(match)}</span>` : ''}
+        <div class="card-footer">
+          <span class="days-left ${daysClass}">${daysText}</span>
+          ${a.url ? `<a href="${a.url}" target="_blank" class="card-link" onclick="event.stopPropagation()">查看详情 →</a>` : '<span style="color:#ccc;font-size:12px;">点击查看详情</span>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ========== 详情弹窗 ==========
+function openModal(id) {
+  const a = ACTIVITIES.find(x => x.id === id);
+  if (!a) return;
+
+  const days = daysLeft(a.endDate);
+  const match = calcMatch(a, state.suitability);
+  const matchLevel = getMatchLevel(match);
+
+  document.getElementById('modalTitle').textContent = a.title;
+  document.getElementById('modalTags').innerHTML = `
+    <span class="card-category cat-${a.category}">${a.category}</span>
+    ${a.tags.map(t => `<span class="card-tag">${t}</span>`).join('')}
+    ${match !== null ? `<span class="card-match-badge match-${matchLevel}">${getMatchText(match)}</span>` : ''}
+  `;
+
+  document.getElementById('modalBody').innerHTML = `
+    <div class="modal-section">
+      <div class="info-grid">
+        <div class="info-item">
+          <div class="label">活动时间</div>
+          <div class="value">${formatDate(a.startDate)} - ${formatDate(a.endDate)}</div>
+        </div>
+        <div class="info-item">
+          <div class="label">剩余时间</div>
+          <div class="value" style="color:${days <= 7 ? '#ff4d4f' : days <= 30 ? '#52c41a' : '#1890ff'}">
+            ${days < 0 ? '已结束' : days === 0 ? '今天截止' : `剩余 ${days} 天`}
+          </div>
+        </div>
+        <div class="info-item">
+          <div class="label">奖励类型</div>
+          <div class="value">${a.rewardType}</div>
+        </div>
+        <div class="info-item">
+          <div class="label">参赛门槛</div>
+          <div class="value">${a.difficulty}（竞争${a.competition}）</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-section">
+      <h3>📝 活动简介</h3>
+      <p>${a.desc}</p>
+    </div>
+
+    <div class="modal-section">
+      <h3>🚀 投稿指引</h3>
+      <div class="submit-guide">
+        <strong>投稿分区：</strong>${a.submitZone}<br>
+        <strong>话题标签：</strong>${a.submitTag}<br>
+        <strong>投稿步骤：</strong>在B站投稿时选择对应分区，并在标题/简介中带上活动话题标签，系统会自动识别参与活动。
+      </div>
+    </div>
+
+    <div class="modal-section">
+      <h3>🏆 奖励说明</h3>
+      <div class="reward-box">
+        ${a.rewardDesc}<br>
+        <span style="font-size:12px;opacity:0.8;">* 具体奖励规则以活动页面为准，通常活动结束后30个工作日内发放</span>
+      </div>
+    </div>
+
+    <div class="modal-section">
+      <h3>🎯 适合的视频类型</h3>
+      <div class="card-tags">
+        ${a.suitableFor.map(s => `<span class="card-tag" style="background:#e6f7ff;color:#1890ff;">${s}</span>`).join('')}
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      ${a.url ? `<a href="${a.url}" target="_blank" class="btn btn-primary">前往活动页面</a>` : '<a href="https://www.bilibili.com/blackboard/era/reward-activity-list-page.html#/list" target="_blank" class="btn btn-primary">去B站活动中心查找</a>'}
+      <button class="btn btn-secondary" onclick="closeModal()">关闭</button>
+    </div>
+  `;
+
+  document.getElementById('modalOverlay').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+
+// 点击遮罩关闭
+document.getElementById('modalOverlay').addEventListener('click', (e) => {
+  if (e.target.id === 'modalOverlay') closeModal();
+});
+
+// ESC关闭
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// ========== 事件绑定 ==========
+function bindEvents() {
+  // 时间筛选
+  document.querySelectorAll('#timeFilters .filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#timeFilters .filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.time = btn.dataset.time;
+      renderCards();
+    });
+  });
+
+  // 奖励筛选
+  document.querySelectorAll('#rewardFilters .filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#rewardFilters .filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.reward = btn.dataset.reward;
+      renderCards();
+    });
+  });
+
+  // 门槛筛选
+  document.querySelectorAll('#difficultyFilters .filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#difficultyFilters .filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.difficulty = btn.dataset.diff;
+      renderCards();
+    });
+  });
+
+  // 搜索
+  document.getElementById('searchInput').addEventListener('input', (e) => {
+    state.search = e.target.value;
+    renderCards();
+  });
+
+  // 排序
+  document.getElementById('sortSelect').addEventListener('change', (e) => {
+    state.sort = e.target.value;
+    renderCards();
+  });
+
+  // 适合度
+  document.getElementById('suitabilityInput').addEventListener('input', (e) => {
+    state.suitability = e.target.value;
+    renderCards();
+  });
+}
+
+// ========== 初始化 ==========
+function init() {
+  // 统计
+  document.getElementById('totalCount').textContent = ACTIVITIES.length;
+  document.getElementById('activeCount').textContent = ACTIVITIES.filter(a => daysLeft(a.endDate) >= 0).length;
+  document.getElementById('endingCount').textContent = ACTIVITIES.filter(a => {
+    const d = daysLeft(a.endDate);
+    return d >= 0 && d <= 7;
+  }).length;
+
+  renderCategoryFilters();
+  bindEvents();
+  renderCards();
+}
+
+init();
+</script>
+</body>
+</html>
