@@ -270,6 +270,26 @@
     return null;
   }
 
+  function getCategoryIcon(category, tags) {
+    const tagText = (tags || []).join('').toLowerCase();
+    // 鬼畜/鸡你太美相关活动用特殊标识
+    if (/鬼畜|黄绿合战|音mad|鬼畜调教|鸡你太美|唱跳|rap|篮球/.test(tagText) || category === '鬼畜') {
+      return { icon: '🏀', label: '鸡你太美', bg: '#fff1f0', color: '#f5222d' };
+    }
+    const map = {
+      '游戏': { icon: '🎮', label: '游戏', bg: '#f0f5ff', color: '#2f54eb' },
+      '动画': { icon: '🎬', label: '动画', bg: '#fff0f6', color: '#eb2f96' },
+      '影视': { icon: '🎥', label: '影视', bg: '#fff7e6', color: '#fa8c16' },
+      '音乐': { icon: '🎵', label: '音乐', bg: '#f9f0ff', color: '#722ed1' },
+      '知识': { icon: '📚', label: '知识', bg: '#e6fffb', color: '#13c2c2' },
+      '美食': { icon: '🍜', label: '美食', bg: '#fcffe6', color: '#a0d911' },
+      '亲子': { icon: '👨‍👩‍👧', label: '亲子', bg: '#fcffe6', color: '#a0d911' },
+      '科技': { icon: '💻', label: '科技', bg: '#f0f0f0', color: '#595959' },
+      '综合': { icon: '✨', label: '综合', bg: '#e6f7ff', color: '#1890ff' }
+    };
+    return map[category] || { icon: '📌', label: category, bg: '#f0f0f0', color: '#595959' };
+  }
+
   function renderActivityList() {
     let listContainer = document.getElementById('baf-activity-list');
     if (!listContainer) {
@@ -304,6 +324,9 @@
       const daysClass = days <= 7 ? 'baf-days-urgent' : days <= 30 ? 'baf-days-normal' : 'baf-days-long';
       const daysText = days < 0 ? '已结束' : days === 0 ? '今天截止' : `剩余${days}天`;
 
+      // 分类图标徽章（取主分类）
+      const catIcon = getCategoryIcon(a.category, a.tags);
+
       const catColors = {
         '综合': '#e6f7ff,#1890ff', '游戏': '#f0f5ff,#2f54eb', '影视': '#fff7e6,#fa8c16',
         '音乐': '#f9f0ff,#722ed1', '知识': '#e6fffb,#13c2c2', '动画': '#fff0f6,#eb2f96',
@@ -313,6 +336,7 @@
 
       return `
         <div class="baf-activity-item ${isHighMatch ? 'baf-high-match' : ''} ${isEndingSoon ? 'baf-ending-soon' : ''}" data-url="${a.url}" data-id="${a.id}">
+          <div class="baf-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${catIcon.label}">${catIcon.icon}</div>
           <div class="baf-activity-item-title">${a.title}</div>
           <div class="baf-activity-item-cats">
             ${(a.categories || [a.category]).map(c => {

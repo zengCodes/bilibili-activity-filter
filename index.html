@@ -216,6 +216,20 @@
     position: relative;
     overflow: hidden;
   }
+  .card-cat-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    z-index: 5;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
   .activity-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(0,0,0,0.1);
@@ -666,6 +680,26 @@ function getMatchText(score) {
   return `匹配度 ${score}%`;
 }
 
+// 分类图标徽章
+function getCategoryIcon(category, tags) {
+  const tagText = (tags || []).join('').toLowerCase();
+  if (/鬼畜|黄绿合战|音mad|鬼畜调教|鸡你太美|唱跳|rap|篮球/.test(tagText) || category === '鬼畜') {
+    return { icon: '🏀', label: '鸡你太美', bg: '#fff1f0', color: '#f5222d' };
+  }
+  const map = {
+    '游戏': { icon: '🎮', label: '游戏', bg: '#f0f5ff', color: '#2f54eb' },
+    '动画': { icon: '🎬', label: '动画', bg: '#fff0f6', color: '#eb2f96' },
+    '影视': { icon: '🎥', label: '影视', bg: '#fff7e6', color: '#fa8c16' },
+    '音乐': { icon: '🎵', label: '音乐', bg: '#f9f0ff', color: '#722ed1' },
+    '知识': { icon: '📚', label: '知识', bg: '#e6fffb', color: '#13c2c2' },
+    '美食': { icon: '🍜', label: '美食', bg: '#fcffe6', color: '#a0d911' },
+    '亲子': { icon: '👨‍👩‍👧', label: '亲子', bg: '#fcffe6', color: '#a0d911' },
+    '科技': { icon: '💻', label: '科技', bg: '#f0f0f0', color: '#595959' },
+    '综合': { icon: '✨', label: '综合', bg: '#e6f7ff', color: '#1890ff' }
+  };
+  return map[category] || { icon: '📌', label: category, bg: '#f0f0f0', color: '#595959' };
+}
+
 // 奖励丰厚程度排序权重
 function getRewardWeight(activity) {
   const weights = {
@@ -787,10 +821,13 @@ function renderCards() {
     const daysClass = days <= 7 ? 'days-urgent' : days <= 30 ? 'days-normal' : 'days-long';
     const daysText = days < 0 ? '已结束' : days === 0 ? '今天截止' : `剩余${days}天`;
 
+    const catIcon = getCategoryIcon(a.category, a.tags);
+
     return `
       <div class="activity-card ${matchLevel === 'high' ? 'high-match' : ''} ${isEndingSoon ? 'ending-soon' : ''}" onclick="openModal(${a.id})">
+        <div class="card-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${catIcon.label}">${catIcon.icon}</div>
         <div class="card-header">
-          <div class="card-title">${a.title}</div>
+          <div class="card-title" style="padding-left:36px;">${a.title}</div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:120px;">
             ${(a.categories || [a.category]).map(c => `<span class="card-category cat-${c}" style="font-size:10px;padding:2px 6px;">${c}</span>`).join('')}
           </div>
