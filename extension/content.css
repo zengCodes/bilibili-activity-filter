@@ -1,0 +1,346 @@
+/* B站活动筛选助手 - 注入样式 */
+
+/* 筛选工具栏 */
+.bili-activity-filter-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: #fff;
+  border-bottom: 2px solid #fb7299;
+  padding: 12px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.baf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.baf-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fb7299;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.baf-stats {
+  font-size: 12px;
+  color: #61666d;
+}
+
+.baf-stats strong {
+  color: #fb7299;
+  font-size: 14px;
+}
+
+.baf-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.baf-filter-label {
+  font-size: 12px;
+  color: #9499a0;
+  font-weight: 600;
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.baf-filter-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.baf-filter-btn {
+  padding: 3px 10px;
+  border: 1px solid #e3e5e7;
+  border-radius: 12px;
+  background: #fff;
+  font-size: 12px;
+  color: #61666d;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.baf-filter-btn:hover {
+  border-color: #fb7299;
+  color: #fb7299;
+}
+
+.baf-filter-btn.active {
+  background: #fb7299;
+  border-color: #fb7299;
+  color: #fff;
+}
+
+.baf-search-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.baf-search-input {
+  flex: 1;
+  padding: 6px 12px;
+  border: 1px solid #e3e5e7;
+  border-radius: 6px;
+  font-size: 13px;
+  outline: none;
+}
+
+.baf-search-input:focus {
+  border-color: #fb7299;
+}
+
+.baf-select {
+  padding: 6px 10px;
+  border: 1px solid #e3e5e7;
+  border-radius: 6px;
+  font-size: 12px;
+  background: #fff;
+  cursor: pointer;
+  outline: none;
+}
+
+.baf-video-type-input {
+  width: 200px;
+  padding: 6px 10px;
+  border: 1px solid #ffd6e0;
+  border-radius: 6px;
+  font-size: 12px;
+  outline: none;
+  background: #fff5f7;
+}
+
+.baf-video-type-input:focus {
+  border-color: #fb7299;
+}
+
+/* 活动卡片增强 */
+.baf-activity-card {
+  position: relative;
+  transition: all 0.2s;
+}
+
+.baf-activity-card.baf-high-match {
+  border: 2px solid #52c41a !important;
+  background: linear-gradient(135deg, #f6ffed 0%, #fff 60%) !important;
+}
+
+.baf-activity-card.baf-ending-soon::after {
+  content: "即将截止";
+  position: absolute;
+  top: 8px;
+  right: -28px;
+  background: #ff4d4f;
+  color: #fff;
+  font-size: 10px;
+  padding: 2px 28px;
+  transform: rotate(45deg);
+  font-weight: 600;
+  z-index: 10;
+}
+
+.baf-card-badges {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 10;
+}
+
+.baf-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.baf-badge-days {
+  background: rgba(0,0,0,0.6);
+}
+
+.baf-badge-days.urgent {
+  background: #ff4d4f;
+}
+
+.baf-badge-reward {
+  background: #faad14;
+}
+
+.baf-badge-match {
+  background: #52c41a;
+}
+
+/* 活动详情悬浮卡片 */
+.baf-tooltip {
+  position: fixed;
+  z-index: 2000;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  padding: 14px 16px;
+  max-width: 320px;
+  font-size: 12px;
+  line-height: 1.6;
+  pointer-events: none;
+  display: none;
+}
+
+.baf-tooltip.show {
+  display: block;
+}
+
+.baf-tooltip-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #18191c;
+}
+
+.baf-tooltip-row {
+  color: #61666d;
+  margin-bottom: 4px;
+}
+
+.baf-tooltip-row strong {
+  color: #18191c;
+}
+
+/* 加载状态 */
+.baf-loading {
+  text-align: center;
+  padding: 40px;
+  color: #9499a0;
+  font-size: 14px;
+}
+
+.baf-loading-spinner {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border: 3px solid #f0f0f0;
+  border-top-color: #fb7299;
+  border-radius: 50%;
+  animation: baf-spin 0.8s linear infinite;
+  margin-bottom: 8px;
+}
+
+@keyframes baf-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 隐藏原页面的活动列表（我们重新渲染） */
+.baf-hide-original .list-scroll-box {
+  display: none !important;
+}
+
+/* 自定义活动列表 */
+.baf-activity-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  padding: 0 20px 20px;
+}
+
+.baf-activity-item {
+  background: #fff;
+  border-radius: 8px;
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid #e3e5e7;
+  position: relative;
+  overflow: hidden;
+}
+
+.baf-activity-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  border-color: #fb7299;
+}
+
+.baf-activity-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #18191c;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.baf-activity-item-cats {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.baf-cat-tag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.baf-activity-item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.baf-activity-item-tag {
+  padding: 1px 6px;
+  background: #f4f5f7;
+  border-radius: 3px;
+  font-size: 10px;
+  color: #61666d;
+}
+
+.baf-activity-item-info {
+  font-size: 11px;
+  color: #9499a0;
+  line-height: 1.6;
+}
+
+.baf-activity-item-reward {
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: #fffbe6;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #ad8b00;
+}
+
+.baf-activity-item-footer {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.baf-days-urgent { color: #ff4d4f; font-weight: 600; }
+.baf-days-normal { color: #52c41a; }
+.baf-days-long { color: #1890ff; }
+
+.baf-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #9499a0;
+  grid-column: 1 / -1;
+}

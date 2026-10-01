@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 360px;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f4f5f7;
+  }
+  .header {
+    background: linear-gradient(135deg, #fb7299 0%, #ff9eb5 100%);
+    color: #fff;
+    padding: 16px;
+  }
+  .header h1 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .header p { font-size: 11px; opacity: 0.9; }
+  .stats {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+    font-size: 11px;
+  }
+  .stats span { opacity: 0.95; }
+  .stats strong { font-size: 14px; }
+
+  .section {
+    padding: 12px 16px;
+    background: #fff;
+    margin-bottom: 8px;
+  }
+  .section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #18191c;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .input-group {
+    margin-bottom: 10px;
+  }
+  .input-group label {
+    display: block;
+    font-size: 11px;
+    color: #61666d;
+    margin-bottom: 4px;
+  }
+  .input-group input, .input-group select {
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid #e3e5e7;
+    border-radius: 6px;
+    font-size: 12px;
+    outline: none;
+  }
+  .input-group input:focus, .input-group select:focus {
+    border-color: #fb7299;
+  }
+
+  .activity-list {
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .activity-item {
+    padding: 10px 0;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .activity-item:hover { background: #fff5f7; }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-item-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #18191c;
+    margin-bottom: 4px;
+    line-height: 1.4;
+  }
+  .activity-item-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+  }
+  .days-urgent { color: #ff4d4f; font-weight: 600; }
+  .days-normal { color: #52c41a; }
+  .days-long { color: #1890ff; }
+  .reward-text { color: #ad8b00; }
+
+  .empty {
+    text-align: center;
+    padding: 20px;
+    color: #9499a0;
+    font-size: 12px;
+  }
+
+  .btn {
+    width: 100%;
+    padding: 9px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .btn-primary {
+    background: #fb7299;
+    color: #fff;
+  }
+  .btn-primary:hover { background: #f55d8a; }
+
+  .loading {
+    text-align: center;
+    padding: 30px;
+    color: #9499a0;
+    font-size: 12px;
+  }
+  .spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #f0f0f0;
+    border-top-color: #fb7299;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .footer {
+    padding: 10px 16px;
+    text-align: center;
+    font-size: 10px;
+    color: #9499a0;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🎬 B站活动筛选助手</h1>
+  <p>实时获取B站投稿活动，智能匹配你的视频类型</p>
+  <div class="stats">
+    <span>共 <strong id="totalCount">0</strong> 个</span>
+    <span>进行中 <strong id="activeCount">0</strong></span>
+    <span>本周截止 <strong id="endingCount">0</strong></span>
+  </div>
+</div>
+
+<div class="section">
+  <div class="input-group">
+    <label>我的视频类型（用于智能匹配）</label>
+    <input type="text" id="videoType" placeholder="如：影视解说、生活vlog、美食制作" />
+  </div>
+  <button class="btn btn-primary" id="openPageBtn">打开B站活动页面 →</button>
+</div>
+
+<div class="section">
+  <div class="section-title">⏰ 即将截止的活动</div>
+  <div class="activity-list" id="endingList">
+    <div class="loading"><div class="spinner"></div>加载中...</div>
+  </div>
+</div>
+
+<div class="footer">
+  数据来源：B站活动中心 | 点击活动卡片直接投稿
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
