@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "B站活动筛选助手",
+    "description": "扩展名称"
+  },
+  "extDesc": {
+    "message": "在B站活动列表页注入筛选工具栏，智能匹配适合你的投稿活动，实时显示剩余时间和奖励信息",
+    "description": "扩展描述"
+  }
+}

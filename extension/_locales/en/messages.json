@@ -1,0 +1,10 @@
+{
+  "extName": {
+    "message": "Bilibili Activity Filter",
+    "description": "Extension name"
+  },
+  "extDesc": {
+    "message": "Inject a filter toolbar into Bilibili activity list page, smart match activities for your videos, show remaining time and rewards",
+    "description": "Extension description"
+  }
+}
