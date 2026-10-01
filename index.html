@@ -24,6 +24,55 @@
   .header p { font-size: 13px; opacity: 0.9; }
   .header .stats { margin-top: 12px; font-size: 13px; opacity: 0.95; }
   .header .stats span { margin-right: 20px; }
+  .header .data-source {
+    margin-top: 10px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .source-badge {
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 11px;
+  }
+  .source-live { background: rgba(82,196,26,0.25); color: #fff; }
+  .source-offline { background: rgba(250,173,20,0.3); color: #fff; }
+  .refresh-btn {
+    padding: 4px 14px;
+    border: 1px solid rgba(255,255,255,0.5);
+    border-radius: 14px;
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .refresh-btn:hover { background: rgba(255,255,255,0.3); }
+  .refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .loading-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.8);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .loading-overlay.show { display: flex; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 4px solid #f0f0f0;
+    border-top-color: #fb7299;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: #61666d; font-size: 14px; }
 
   /* 主体容器 */
   .container { max-width: 1400px; margin: 0 auto; padding: 20px 32px 40px; }
@@ -444,8 +493,18 @@
     <span>📊 共 <strong id="totalCount">0</strong> 个活动</span>
     <span>🔥 进行中 <strong id="activeCount">0</strong> 个</span>
     <span>⏰ 本周截止 <strong id="endingCount">0</strong> 个</span>
-    <span>📅 数据更新：2026-10-01</span>
   </div>
+  <div class="data-source">
+    <span id="sourceBadge" class="source-badge source-live">● 实时数据</span>
+    <span id="updateTime" style="opacity:0.8;">正在加载...</span>
+    <button class="refresh-btn" id="refreshBtn" onclick="refreshData()">🔄 刷新数据</button>
+  </div>
+</div>
+
+<!-- 加载遮罩 -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">正在从B站获取最新活动数据...</div>
 </div>
 
 <div class="container">
@@ -534,7 +593,7 @@
 </div>
 
 <div class="footer">
-  <p>数据来源：<a href="https://www.bilibili.com/blackboard/era/reward-activity-list-page.html#/list" target="_blank">B站有奖活动中心</a> | 手动维护，建议定期更新 data.js</p>
+  <p>数据来源：<a href="https://www.bilibili.com/blackboard/era/reward-activity-list-page.html#/list" target="_blank">B站有奖活动中心</a> | 实时获取，启动 server.js 后自动同步最新活动</p>
 </div>
 
 <script src="data.js"></script>
@@ -550,7 +609,8 @@ const state = {
   suitability: ''
 };
 
-const TODAY = new Date('2026-10-01');
+let ACTIVITIES = []; // 运行时数据，从API或本地fallback加载
+const TODAY = new Date(); // 使用当前日期
 
 // ========== 工具函数 ==========
 function daysLeft(endDate) {
@@ -891,18 +951,119 @@ function bindEvents() {
   });
 }
 
-// ========== 初始化 ==========
-function init() {
-  // 统计
+// ========== 数据加载 ==========
+let dataSource = 'loading'; // 'live' | 'offline' | 'loading'
+let lastUpdateTime = null;
+
+async function loadActivities(forceRefresh = false) {
+  showLoading('正在从B站获取最新活动数据...');
+
+  if (forceRefresh) {
+    try { await fetch('/api/refresh'); } catch(e) {}
+  }
+
+  try {
+    const resp = await fetch('/api/activities');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const result = await resp.json();
+
+    if (result.code === 0 && result.data && result.data.length > 0) {
+      ACTIVITIES = result.data;
+      dataSource = result.cached ? 'live-cached' : 'live';
+      lastUpdateTime = result.updatedAt;
+      updateDataSourceDisplay();
+      hideLoading();
+      return true;
+    }
+    throw new Error('API返回空数据');
+  } catch (err) {
+    console.warn('API获取失败，使用本地数据:', err.message);
+
+    // 使用本地fallback数据
+    if (FALLBACK_ACTIVITIES.length > 0) {
+      ACTIVITIES = FALLBACK_ACTIVITIES;
+      dataSource = 'offline';
+      lastUpdateTime = null;
+      updateDataSourceDisplay();
+      hideLoading();
+      return true;
+    }
+
+    hideLoading();
+    ACTIVITIES = [];
+    dataSource = 'error';
+    updateDataSourceDisplay();
+    return false;
+  }
+}
+
+function refreshData() {
+  loadActivities(true).then(() => {
+    // 重置筛选
+    state.category = 'all';
+    state.search = '';
+    document.getElementById('searchInput').value = '';
+    renderCategoryFilters();
+    renderCards();
+    updateStats();
+  });
+}
+
+function showLoading(text) {
+  document.getElementById('loadingText').textContent = text || '加载中...';
+  document.getElementById('loadingOverlay').classList.add('show');
+  document.getElementById('refreshBtn').disabled = true;
+}
+
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.remove('show');
+  document.getElementById('refreshBtn').disabled = false;
+}
+
+function updateDataSourceDisplay() {
+  const badge = document.getElementById('sourceBadge');
+  const timeEl = document.getElementById('updateTime');
+
+  if (dataSource === 'live' || dataSource === 'live-cached') {
+    badge.className = 'source-badge source-live';
+    badge.textContent = dataSource === 'live' ? '● 实时数据' : '● 实时数据(缓存)';
+    if (lastUpdateTime) {
+      const d = new Date(lastUpdateTime);
+      timeEl.textContent = `更新于 ${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    }
+  } else if (dataSource === 'offline') {
+    badge.className = 'source-badge source-offline';
+    badge.textContent = '⚠ 离线数据';
+    timeEl.textContent = '后端未启动，使用本地缓存数据（启动 server.js 可获取实时数据）';
+  } else if (dataSource === 'error') {
+    badge.className = 'source-badge source-offline';
+    badge.textContent = '✕ 加载失败';
+    timeEl.textContent = '无法获取活动数据';
+  } else {
+    badge.textContent = '加载中...';
+    timeEl.textContent = '正在加载...';
+  }
+}
+
+function updateStats() {
   document.getElementById('totalCount').textContent = ACTIVITIES.length;
   document.getElementById('activeCount').textContent = ACTIVITIES.filter(a => daysLeft(a.endDate) >= 0).length;
   document.getElementById('endingCount').textContent = ACTIVITIES.filter(a => {
     const d = daysLeft(a.endDate);
     return d >= 0 && d <= 7;
   }).length;
+}
 
-  renderCategoryFilters();
+// ========== 初始化 ==========
+async function init() {
   bindEvents();
+
+  // 加载数据
+  await loadActivities();
+
+  // 数据加载完成后渲染
+  renderCategoryFilters();
+  updateStats();
   renderCards();
 }
 

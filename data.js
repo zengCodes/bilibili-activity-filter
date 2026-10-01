@@ -1,16 +1,10 @@
 /**
- * B站活动数据
+ * B站活动数据 - 离线fallback
+ * 当后端服务未启动时使用此数据
  * 数据来源：https://www.bilibili.com/blackboard/era/reward-activity-list-page.html#/list
  * 更新时间：2026-10-01
- *
- * 字段说明：
- * - category: 综合|游戏|影视|音乐|知识|动画|亲子|科技|鬼畜|品牌
- * - rewardType: 现金瓜分|固定奖金|流量扶持|游戏道具|周边抽奖|混合
- * - difficulty: 参赛门槛（低=只要投稿即可参与，中=有内容质量要求，高=需特定技能/资源）
- * - competition: 竞争烈度（低/中/高）
- * - suitableFor: 适合的视频类型标签，用于适合度匹配
  */
-const ACTIVITIES = [
+const FALLBACK_ACTIVITIES = [
   {
     id: 1,
     title: "2026诺贝尔奖",
