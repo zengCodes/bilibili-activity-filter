@@ -683,9 +683,9 @@ function getRewardWeight(activity) {
 function filterActivities() {
   let list = [...ACTIVITIES];
 
-  // 分类筛选
+  // 分类筛选（支持多分类，活动的categories数组中包含即匹配）
   if (state.category !== 'all') {
-    list = list.filter(a => a.category === state.category);
+    list = list.filter(a => (a.categories || [a.category]).includes(state.category));
   }
 
   // 时间筛选
@@ -743,11 +743,17 @@ function filterActivities() {
 
 // ========== 渲染 ==========
 function renderCategoryFilters() {
-  const categories = ['all', ...new Set(ACTIVITIES.map(a => a.category))];
+  // 从所有活动的多分类数组中收集所有分类
+  const allCats = new Set();
+  ACTIVITIES.forEach(a => {
+    (a.categories || [a.category]).forEach(c => allCats.add(c));
+  });
+  const categories = ['all', ...Array.from(allCats)];
   const container = document.getElementById('categoryFilters');
   container.innerHTML = categories.map(cat => {
     const label = cat === 'all' ? '全部' : cat;
-    const count = cat === 'all' ? ACTIVITIES.length : ACTIVITIES.filter(a => a.category === cat).length;
+    // 多分类活动会被计入多个分类
+    const count = cat === 'all' ? ACTIVITIES.length : ACTIVITIES.filter(a => (a.categories || [a.category]).includes(cat)).length;
     return `<span class="filter-btn ${state.category === cat ? 'active' : ''}" data-cat="${cat}">${label}(${count})</span>`;
   }).join('');
 
@@ -785,7 +791,9 @@ function renderCards() {
       <div class="activity-card ${matchLevel === 'high' ? 'high-match' : ''} ${isEndingSoon ? 'ending-soon' : ''}" onclick="openModal(${a.id})">
         <div class="card-header">
           <div class="card-title">${a.title}</div>
-          <span class="card-category cat-${a.category}">${a.category}</span>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:120px;">
+            ${(a.categories || [a.category]).map(c => `<span class="card-category cat-${c}" style="font-size:10px;padding:2px 6px;">${c}</span>`).join('')}
+          </div>
         </div>
         <div class="card-tags">
           ${a.tags.map(t => `<span class="card-tag">${t}</span>`).join('')}
@@ -819,7 +827,7 @@ function openModal(id) {
 
   document.getElementById('modalTitle').textContent = a.title;
   document.getElementById('modalTags').innerHTML = `
-    <span class="card-category cat-${a.category}">${a.category}</span>
+    ${(a.categories || [a.category]).map(c => `<span class="card-category cat-${c}">${c}</span>`).join('')}
     ${a.tags.map(t => `<span class="card-tag">${t}</span>`).join('')}
     ${match !== null ? `<span class="card-match-badge match-${matchLevel}">${getMatchText(match)}</span>` : ''}
   `;
