@@ -190,7 +190,7 @@
 
     toolbar.innerHTML = `
       <div class="baf-header">
-        <div class="baf-title">🎬 B站活动筛选助手</div>
+        <div class="baf-title"><img src="${chrome.runtime.getURL('icons/icon48.png')}" class="baf-title-logo" alt="logo"> B站活动筛选助手</div>
         <div class="baf-stats">
           共 <strong id="baf-total">0</strong> 个活动 |
           进行中 <strong id="baf-active">0</strong> |

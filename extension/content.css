@@ -28,6 +28,12 @@
   align-items: center;
   gap: 6px;
 }
+.baf-title-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
 
 .baf-stats {
   font-size: 12px;
