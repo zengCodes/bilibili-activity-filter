@@ -2,7 +2,7 @@
 // @name         B站活动筛选助手
 // @name:zh-CN   B站活动筛选助手
 // @namespace    https://github.com/zengCodes/bilibili-activity-filter
-// @version      1.1.5
+// @version      1.1.6
 // @description  实时获取B站173+投稿活动，智能匹配你的视频类型，支持分类/时间/奖励/门槛筛选、匹配度排序、截止提醒
 // @description:zh-CN 实时获取B站173+投稿活动，智能匹配你的视频类型，支持分类/时间/奖励/门槛筛选、匹配度排序、截止提醒
 // @author       zengCodes
