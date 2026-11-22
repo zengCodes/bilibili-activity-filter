@@ -9,10 +9,40 @@ const { esc, debounce, daysLeft, formatDateShort, calcMatch, getMatchLevel } = B
 
 // 加载设置
 async function loadSettings() {
-  const result = await chrome.storage.sync.get(['videoType']);
+  const result = await chrome.storage.sync.get(['videoType', 'savedActivities']);
   if (result.videoType) {
     document.getElementById('videoType').value = result.videoType;
   }
+  renderFavList(result.savedActivities || []);
+}
+
+// 渲染收藏列表（数据来自活动页卡片的 ☆ 收藏，含 id/title/url/endDate 精简信息）
+function renderFavList(saved) {
+  const container = document.getElementById('favList');
+  if (!saved.length) {
+    container.innerHTML = '<div class="empty">暂无收藏，在活动页点击卡片右上角 ☆ 即可收藏</div>';
+    return;
+  }
+  const list = [...saved].sort((a, b) => daysLeft(a.endDate) - daysLeft(b.endDate));
+  container.innerHTML = list.map(f => {
+    const d = daysLeft(f.endDate);
+    const daysClass = d <= 3 ? 'days-urgent' : d <= 7 ? 'days-normal' : 'days-long';
+    const daysText = d < 0 ? '已结束' : d === 0 ? '今天截止' : `剩余${d}天`;
+    return `
+      <div class="activity-item fav-item" data-url="${esc(f.url || '')}">
+        <div class="activity-item-title">${esc(f.title)}</div>
+        <div class="activity-item-meta">
+          <span class="${daysClass}">${daysText}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+  container.querySelectorAll('.fav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const url = item.dataset.url;
+      if (url) chrome.tabs.create({ url });
+    });
+  });
 }
 
 // 保存设置

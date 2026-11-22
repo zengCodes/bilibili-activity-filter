@@ -19,32 +19,61 @@
   // ========== 注入样式 ==========
   const style = document.createElement('style');
   style.textContent = `
+    /* 主题变量：.baf-dark（由 JS 检测页面背景亮度/系统偏好后挂载）覆盖为深色 */
+    :root {
+      --baf-bg: #fff;
+      --baf-bg-subtle: #f4f5f7;
+      --baf-bg-accent: #fff5f7;
+      --baf-accent-border: #ffd6e0;
+      --baf-bg-warning: #fffbe6;
+      --baf-bg-match-high: linear-gradient(135deg, #f6ffed 0%, #fff 60%);
+      --baf-text-main: #18191c;
+      --baf-text-sub: #61666d;
+      --baf-text-faint: #9499a0;
+      --baf-text-warning: #ad8b00;
+      --baf-border: #e3e5e7;
+      --baf-brand: #fb7299;
+      --baf-contrast: #fff;
+    }
+    .baf-dark {
+      --baf-bg: #1e1e20;
+      --baf-bg-subtle: #2a2a2d;
+      --baf-bg-accent: #2a1f24;
+      --baf-accent-border: #3a3a3f;
+      --baf-bg-warning: #322a12;
+      --baf-bg-match-high: #16251a;
+      --baf-text-main: #e8e8ea;
+      --baf-text-sub: #a8a8b0;
+      --baf-text-faint: #70707a;
+      --baf-text-warning: #d9b13b;
+      --baf-border: #3a3a3f;
+    }
     .bili-activity-filter-toolbar {
-      position: sticky; top: 0; z-index: 1000; background: #fff;
+      position: sticky; top: 0; z-index: 1000; background: var(--baf-bg);
       border-bottom: 2px solid #fb7299; padding: 12px 20px; margin-bottom: 16px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
       font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
     }
     .baf-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
     .baf-title { font-size: 15px; font-weight: 700; color: #fb7299; display: flex; align-items: center; gap: 6px; }
-    .baf-stats { font-size: 12px; color: #61666d; }
+    .baf-stats { font-size: 12px; color: var(--baf-text-sub); }
     .baf-stats strong { color: #fb7299; font-size: 14px; }
     .baf-filter-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-    .baf-filter-label { font-size: 12px; color: #9499a0; font-weight: 600; min-width: 50px; flex-shrink: 0; }
+    .baf-filter-label { font-size: 12px; color: var(--baf-text-faint); font-weight: 600; min-width: 50px; flex-shrink: 0; }
     .baf-filter-btns { display: flex; flex-wrap: wrap; gap: 6px; }
     .baf-filter-btn {
-      padding: 3px 10px; border: 1px solid #e3e5e7; border-radius: 12px; background: #fff;
-      font-size: 12px; color: #61666d; cursor: pointer; transition: all 0.15s; user-select: none;
+      padding: 3px 10px; border: 1px solid var(--baf-border); border-radius: 12px; background: var(--baf-bg);
+      font-size: 12px; color: var(--baf-text-sub); cursor: pointer; transition: all 0.15s; user-select: none;
     }
     .baf-filter-btn:hover { border-color: #fb7299; color: #fb7299; }
-    .baf-filter-btn.active { background: #fb7299; border-color: #fb7299; color: #fff; }
+    .baf-filter-btn.active { background: #fb7299; border-color: #fb7299; color: var(--baf-contrast); }
     .baf-search-row { display: flex; gap: 8px; align-items: center; }
-    .baf-search-input { flex: 1; padding: 6px 12px; border: 1px solid #e3e5e7; border-radius: 6px; font-size: 13px; outline: none; }
+    .baf-search-input { flex: 1; padding: 6px 12px; border: 1px solid var(--baf-border); border-radius: 6px; font-size: 13px; outline: none; }
     .baf-search-input:focus { border-color: #fb7299; }
-    .baf-select { padding: 6px 10px; border: 1px solid #e3e5e7; border-radius: 6px; font-size: 12px; background: #fff; cursor: pointer; outline: none; }
-    .baf-video-type-input { width: 200px; padding: 6px 10px; border: 1px solid #ffd6e0; border-radius: 6px; font-size: 12px; outline: none; background: #fff5f7; }
+    .baf-select { padding: 6px 10px; border: 1px solid var(--baf-border); border-radius: 6px; font-size: 12px; background: var(--baf-bg); cursor: pointer; outline: none; }
+    .baf-video-type-input { width: 200px; padding: 6px 10px; border: 1px solid var(--baf-accent-border); border-radius: 6px; font-size: 12px; outline: none; background: var(--baf-bg-accent); }
     .baf-video-type-input:focus { border-color: #fb7299; }
-    .baf-loading { text-align: center; padding: 40px; color: #9499a0; font-size: 14px; }
+    .baf-loading { text-align: center; padding: 40px; color: var(--baf-text-faint); font-size: 14px; }
     .baf-loading-spinner {
       display: inline-block; width: 24px; height: 24px; border: 3px solid #f0f0f0;
       border-top-color: #fb7299; border-radius: 50%; animation: baf-spin 0.8s linear infinite; margin-bottom: 8px;
@@ -56,8 +85,8 @@
       gap: 12px; padding: 0 20px 20px;
     }
     .baf-activity-item {
-      background: #fff; border-radius: 8px; padding: 14px; cursor: pointer; transition: all 0.2s;
-      border: 1px solid #e3e5e7; position: relative; overflow: hidden;
+      background: var(--baf-bg); border-radius: 8px; padding: 14px; cursor: pointer; transition: all 0.2s;
+      border: 1px solid var(--baf-border); position: relative; overflow: hidden;
     }
     .baf-cat-badge {
       position: absolute; top: 8px; left: 8px; width: 28px; height: 28px; border-radius: 6px;
@@ -65,23 +94,35 @@
       box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
     .baf-activity-item:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-color: #fb7299; }
-    .baf-activity-item-title { font-size: 14px; font-weight: 600; color: #18191c; margin-bottom: 6px; line-height: 1.4; padding-left: 36px; }
+    .baf-activity-item-title { font-size: 14px; font-weight: 600; color: var(--baf-text-main); margin-bottom: 6px; line-height: 1.4; padding-left: 36px; }
     .baf-activity-item-cats { display: flex; gap: 4px; margin-bottom: 6px; flex-wrap: wrap; }
     .baf-cat-tag { padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; }
     .baf-activity-item-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
-    .baf-activity-item-tag { padding: 1px 6px; background: #f4f5f7; border-radius: 3px; font-size: 10px; color: #61666d; }
-    .baf-activity-item-info { font-size: 11px; color: #9499a0; line-height: 1.6; }
-    .baf-activity-item-reward { margin-top: 8px; padding: 6px 8px; background: #fffbe6; border-radius: 4px; font-size: 11px; color: #ad8b00; }
+    .baf-activity-item-tag { padding: 1px 6px; background: var(--baf-bg-subtle); border-radius: 3px; font-size: 10px; color: var(--baf-text-sub); }
+    .baf-activity-item-info { font-size: 11px; color: var(--baf-text-faint); line-height: 1.6; }
+    .baf-activity-item-reward { margin-top: 8px; padding: 6px 8px; background: var(--baf-bg-warning); border-radius: 4px; font-size: 11px; color: var(--baf-text-warning); }
     .baf-activity-item-footer { margin-top: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
     .baf-days-urgent { color: #ff4d4f; font-weight: 600; }
     .baf-days-normal { color: #52c41a; }
     .baf-days-long { color: #1890ff; }
-    .baf-badge { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; color: #fff; }
+    .baf-badge { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; color: var(--baf-contrast); }
     .baf-badge-match { background: #52c41a; }
     .baf-badge-mid { background: #1890ff; }
-    .baf-badge-low { background: #9499a0; }
-    .baf-high-match { border: 2px solid #52c41a !important; background: linear-gradient(135deg, #f6ffed 0%, #fff 60%) !important; }
-    .baf-empty { text-align: center; padding: 60px 20px; color: #9499a0; grid-column: 1 / -1; }
+    .baf-badge-low { background: var(--baf-text-faint); }
+    .baf-high-match { border: 2px solid #52c41a !important; background: var(--baf-bg-match-high) !important; }
+    .baf-activity-item.is-fav { border-color: #faad14 !important; }
+    .baf-fav-btn {
+      position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border: none; background: transparent;
+      font-size: 16px; cursor: pointer; z-index: 12; line-height: 1; padding: 0;
+      opacity: 0.45; transition: all 0.15s; filter: grayscale(1);
+    }
+    .baf-fav-btn:hover { opacity: 1; transform: scale(1.15); }
+    .baf-fav-btn.active { opacity: 1; filter: none; }
+    .baf-ending-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      background: #ff4d4f; color: #fff; font-size: 10px; font-weight: 600;
+    }
+    .baf-empty { text-align: center; padding: 60px 20px; color: var(--baf-text-faint); grid-column: 1 / -1; }
   `;
   document.head.appendChild(style);
 
@@ -89,6 +130,7 @@
   let activities = [];
   let settings = {
     videoType: '',
+    favorites: [],
     filters: {
       category: 'all',
       time: 'all',
@@ -104,6 +146,44 @@
   // ========== 工具函数（来自 BAFCore 三端共享，见根目录 core.js） ==========
   const { esc, debounce, daysLeft, formatDate, calcMatch, getMatchLevel, getMatchText, getCategoryIcon, fetchRawActivities, browserFetchOne, transformActivities } = BAFCore;
 
+  // ========== 收藏 ==========
+  let favMap = new Map(); // id -> {id, title, url, endDate}，数据源 settings.favorites（localStorage）
+
+  function refreshFavMap() {
+    favMap = new Map((settings.favorites || []).map(f => [f.id, f]));
+  }
+
+  function toggleFav(id) {
+    const list = settings.favorites || [];
+    const idx = list.findIndex(f => f.id === id);
+    if (idx >= 0) {
+      list.splice(idx, 1);
+    } else {
+      const a = activities.find(x => x.id === id);
+      if (a) list.push({ id: a.id, title: a.title, url: a.url, endDate: a.endDate });
+    }
+    settings.favorites = list;
+    refreshFavMap();
+    saveSettings();
+    renderActivityList();
+  }
+
+  // ========== 暗色模式检测 ==========
+  // 优先探测B站页面背景亮度（站点深色模式不跟随系统），系统偏好作为补充
+  function applyDarkMode() {
+    let dark = false;
+    try {
+      const bg = getComputedStyle(document.body).backgroundColor;
+      const m = bg.match(/\d+/g);
+      if (m && m.length >= 3) {
+        const [r, g, b] = m.map(Number);
+        dark = (r * 0.299 + g * 0.587 + b * 0.114) < 128;
+      }
+      if (!dark && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) dark = true;
+    } catch (e) { /* 忽略 */ }
+    document.documentElement.classList.toggle('baf-dark', dark);
+  }
+
   function loadSettings() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -111,6 +191,7 @@
         const parsed = JSON.parse(saved);
         settings = { ...settings, ...parsed };
         if (!settings.filters) settings.filters = {};
+        if (!settings.favorites) settings.favorites = [];
       }
     } catch (e) { console.warn('读取设置失败', e); }
   }
@@ -167,7 +248,11 @@
     } else if (f.sort === 'days-desc') {
       list.sort((a, b) => daysLeft(b.endDate) - daysLeft(a.endDate));
     } else if (f.sort === 'match-desc') {
-      list.sort((a, b) => (calcMatch(b, settings.videoType) || 0) - (calcMatch(a, settings.videoType) || 0));
+      // 预计算匹配度，避免排序比较器中每个元素重复计算正则
+      const matchCache = new Map(list.map(a => [a.id, calcMatch(a, settings.videoType) || 0]));
+      list.sort((a, b) => (matchCache.get(b.id) || 0) - (matchCache.get(a.id) || 0));
+    } else if (f.sort === 'fav-first') {
+      list.sort((a, b) => (favMap.has(b.id) ? 1 : 0) - (favMap.has(a.id) ? 1 : 0) || daysLeft(a.endDate) - daysLeft(b.endDate));
     }
 
     return list;
@@ -239,6 +324,7 @@
         <input type="text" class="baf-video-type-input" id="baf-video-type" placeholder="我的视频类型（如：影视解说）" value="${esc(settings.videoType || '')}" />
         <select class="baf-select" id="baf-sort">
           <option value="days-asc">截止时间（近→远）</option>
+          <option value="fav-first">收藏优先</option>
           <option value="days-desc">截止时间（远→近）</option>
           <option value="match-desc">匹配度（高→低）</option>
         </select>
@@ -291,6 +377,8 @@
       const match = calcMatch(a, settings.videoType);
       const matchLevel = getMatchLevel(match);
       const isHighMatch = matchLevel === 'high';
+      const isEndingSoon = days >= 0 && days <= 7;
+      const isFav = favMap.has(a.id);
       const daysClass = days <= 7 ? 'baf-days-urgent' : days <= 30 ? 'baf-days-normal' : 'baf-days-long';
       const daysText = days < 0 ? '已结束' : days === 0 ? '今天截止' : `剩余${days}天`;
       const catIcon = getCategoryIcon(a.category, a.tags);
@@ -301,7 +389,9 @@
           : `<span class="baf-badge baf-badge-low" style="display:inline-block;">匹配度 ${match}%</span>`;
 
       return `
-        <div class="baf-activity-item ${isHighMatch ? 'baf-high-match' : ''}" data-url="${esc(a.url)}" data-id="${Number(a.id) || 0}">
+        <div class="baf-activity-item ${isHighMatch ? 'baf-high-match' : ''} ${isFav ? 'is-fav' : ''}" data-url="${esc(a.url)}" data-id="${Number(a.id) || 0}">
+          <button class="baf-fav-btn ${isFav ? 'active' : ''}" title="${isFav ? '取消收藏' : '收藏此活动'}">${isFav ? '⭐' : '☆'}</button>
+          ${isEndingSoon ? `<div style="margin-bottom:6px;"><span class="baf-ending-badge">⏰ ${days === 0 ? '今天截止' : `${days}天后截止`}</span></div>` : ''}
           <div class="baf-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${esc(catIcon.label)}">${catIcon.icon}</div>
           <div class="baf-activity-item-title">${esc(a.title)}</div>
           <div class="baf-activity-item-cats">
@@ -329,7 +419,12 @@
     }).join('');
 
     listContainer.querySelectorAll('.baf-activity-item').forEach(item => {
-      item.addEventListener('click', () => {
+      item.addEventListener('click', (e) => {
+        if (e.target.classList && e.target.classList.contains('baf-fav-btn')) {
+          e.stopPropagation();
+          toggleFav(Number(item.dataset.id));
+          return;
+        }
         const url = item.dataset.url;
         if (url) window.open(url, '_blank');
       });
@@ -392,6 +487,10 @@
   async function init() {
     console.log('[B站活动筛选助手] 正在初始化...');
     loadSettings();
+    refreshFavMap();
+    applyDarkMode();
+    const themeObserver = new MutationObserver(applyDarkMode);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
     const loading = document.createElement('div');
     loading.id = 'baf-loading';

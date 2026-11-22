@@ -7,10 +7,49 @@
 <title>B站活动筛选工具 - 投稿活动一键匹配</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg-page: #f4f5f7;
+    --bg-surface: #ffffff;
+    --bg-surface-alt: #f9f9fa;
+    --bg-input: #ffffff;
+    --bg-subtle: #f4f5f7;
+    --bg-accent: #fff5f7;
+    --bg-match-high: linear-gradient(135deg, #f6ffed 0%, #ffffff 60%);
+    --bg-warning: #fffbe6;
+    --overlay: rgba(255,255,255,0.8);
+    --text-main: #18191c;
+    --text-sub: #61666d;
+    --text-faint: #9499a0;
+    --text-warning: #ad8b00;
+    --border: #e3e5e7;
+    --brand: #fb7299;
+    --shadow: rgba(0,0,0,0.06);
+    --shadow-hover: rgba(0,0,0,0.1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-page: #121212;
+      --bg-surface: #1e1e20;
+      --bg-surface-alt: #2a2a2d;
+      --bg-input: #26262a;
+      --bg-subtle: #2a2a2d;
+      --bg-accent: #2a1f24;
+      --bg-match-high: #16251a;
+      --bg-warning: #322a12;
+      --overlay: rgba(0,0,0,0.7);
+      --text-main: #e8e8ea;
+      --text-sub: #a8a8b0;
+      --text-faint: #70707a;
+      --text-warning: #d9b13b;
+      --border: #3a3a3f;
+      --shadow: rgba(0,0,0,0.3);
+      --shadow-hover: rgba(0,0,0,0.5);
+    }
+  }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-    background: #f4f5f7;
-    color: #18191c;
+    background: var(--bg-page);
+    color: var(--text-main);
     min-height: 100vh;
   }
 
@@ -56,7 +95,7 @@
   .loading-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(255,255,255,0.8);
+    background: var(--overlay);
     display: none;
     justify-content: center;
     align-items: center;
@@ -73,19 +112,53 @@
     animation: spin 0.8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .loading-text { color: #61666d; font-size: 14px; }
+  .loading-text { color: var(--text-sub); font-size: 14px; }
 
   /* 主体容器 */
   .container { max-width: 1400px; margin: 0 auto; padding: 20px 32px 40px; }
 
   /* 筛选面板 */
   .filter-panel {
-    background: #fff;
+    background: var(--bg-surface);
     border-radius: 12px;
     padding: 20px 24px;
     margin-bottom: 20px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    box-shadow: 0 1px 4px var(--shadow);
   }
+  /* 折叠摘要行：常驻显示当前筛选状态，四行筛选默认收起 */
+  .filter-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+  .filter-summary-text { font-size: 13px; color: var(--text-faint); flex: 1; }
+  .filter-summary-text strong { color: var(--brand); font-weight: 600; }
+  .filter-summary-actions { display: flex; gap: 8px; align-items: center; }
+  .filter-toggle, .fav-toggle {
+    padding: 5px 14px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg-input);
+    font-size: 13px;
+    color: var(--text-sub);
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .filter-toggle:hover { border-color: var(--brand); color: var(--brand); }
+  .filter-toggle .toggle-arrow { display: inline-block; transition: transform 0.2s; }
+  .filter-toggle.open .toggle-arrow { transform: rotate(180deg); }
+  .fav-toggle.active {
+    background: #faad14;
+    border-color: #faad14;
+    color: #fff;
+  }
+  .filter-expandable { display: none; padding-top: 14px; }
+  .filter-expandable.open { display: block; }
   .filter-row {
     display: flex;
     align-items: center;
@@ -96,7 +169,7 @@
   .filter-row:last-child { margin-bottom: 0; }
   .filter-label {
     font-size: 13px;
-    color: #61666d;
+    color: var(--text-sub);
     font-weight: 600;
     min-width: 60px;
     flex-shrink: 0;
@@ -104,11 +177,11 @@
   .filter-btns { display: flex; flex-wrap: wrap; gap: 8px; }
   .filter-btn {
     padding: 5px 14px;
-    border: 1px solid #e3e5e7;
+    border: 1px solid var(--border);
     border-radius: 16px;
-    background: #fff;
+    background: var(--bg-input);
     font-size: 13px;
-    color: #61666d;
+    color: var(--text-sub);
     cursor: pointer;
     transition: all 0.2s;
     user-select: none;
@@ -126,6 +199,7 @@
     gap: 12px;
     align-items: center;
     flex-wrap: wrap;
+    margin-top: 14px;
   }
   .search-box {
     flex: 1;
@@ -135,11 +209,13 @@
   .search-box input {
     width: 100%;
     padding: 9px 14px 9px 36px;
-    border: 1px solid #e3e5e7;
+    border: 1px solid var(--border);
     border-radius: 8px;
     font-size: 14px;
     outline: none;
     transition: border-color 0.2s;
+    background: var(--bg-input);
+    color: var(--text-main);
   }
   .search-box input:focus { border-color: #fb7299; }
   .search-box::before {
@@ -152,10 +228,11 @@
   }
   .sort-select {
     padding: 9px 14px;
-    border: 1px solid #e3e5e7;
+    border: 1px solid var(--border);
     border-radius: 8px;
     font-size: 14px;
-    background: #fff;
+    background: var(--bg-input);
+    color: var(--text-main);
     cursor: pointer;
     outline: none;
   }
@@ -163,8 +240,8 @@
 
   /* 适合度输入 */
   .suitability-box {
-    background: linear-gradient(135deg, #fff5f7 0%, #fff 100%);
-    border: 1px solid #ffd6e0;
+    background: var(--bg-accent);
+    border: 1px solid var(--border);
     border-radius: 12px;
     padding: 16px 20px;
     margin-bottom: 20px;
@@ -179,23 +256,24 @@
   .suitability-box input {
     width: 100%;
     padding: 9px 14px;
-    border: 1px solid #ffd6e0;
+    border: 1px solid var(--border);
     border-radius: 8px;
     font-size: 14px;
     outline: none;
-    background: #fff;
+    background: var(--bg-input);
+    color: var(--text-main);
   }
   .suitability-box input:focus { border-color: #fb7299; }
   .suitability-box .hint {
     font-size: 12px;
-    color: #9499a0;
+    color: var(--text-faint);
     margin-top: 6px;
   }
 
   /* 结果统计 */
   .result-count {
     font-size: 13px;
-    color: #61666d;
+    color: var(--text-sub);
     margin-bottom: 14px;
   }
   .result-count strong { color: #fb7299; font-size: 16px; }
@@ -207,10 +285,10 @@
     gap: 16px;
   }
   .activity-card {
-    background: #fff;
+    background: var(--bg-surface);
     border-radius: 12px;
     padding: 18px 20px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    box-shadow: 0 1px 4px var(--shadow);
     cursor: pointer;
     transition: all 0.25s;
     border: 2px solid transparent;
@@ -233,23 +311,46 @@
   }
   .activity-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    box-shadow: 0 6px 20px var(--shadow-hover);
     border-color: #fb7299;
   }
   .activity-card.high-match {
     border-color: #52c41a;
-    background: linear-gradient(135deg, #f6ffed 0%, #fff 60%);
+    background: var(--bg-match-high);
   }
-  .activity-card.ending-soon::after {
-    content: "即将截止";
+  .activity-card.is-fav {
+    border-color: #faad14;
+  }
+
+  /* 收藏星标（右上角，替代原丝带位置） */
+  .fav-btn {
     position: absolute;
-    top: 12px;
-    right: -28px;
+    top: 10px;
+    right: 10px;
+    width: 30px;
+    height: 30px;
+    border: none;
+    background: transparent;
+    font-size: 18px;
+    cursor: pointer;
+    z-index: 6;
+    line-height: 1;
+    opacity: 0.45;
+    transition: all 0.15s;
+    filter: grayscale(1);
+  }
+  .fav-btn:hover { opacity: 1; transform: scale(1.15); }
+  .fav-btn.active { opacity: 1; filter: none; }
+
+  /* 即将截止胶囊徽章（替代原 45° 丝带，不遮挡内容且显示具体天数） */
+  .card-ending { margin-bottom: 8px; }
+  .ending-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
     background: #ff4d4f;
     color: #fff;
     font-size: 11px;
-    padding: 3px 32px;
-    transform: rotate(45deg);
     font-weight: 600;
   }
 
@@ -262,7 +363,7 @@
   .card-title {
     font-size: 16px;
     font-weight: 700;
-    color: #18191c;
+    color: var(--text-main);
     line-height: 1.4;
     flex: 1;
     padding-right: 8px;
@@ -293,14 +394,14 @@
   }
   .card-tag {
     padding: 2px 8px;
-    background: #f4f5f7;
+    background: var(--bg-subtle);
     border-radius: 4px;
     font-size: 11px;
-    color: #61666d;
+    color: var(--text-sub);
   }
   .card-info {
     font-size: 13px;
-    color: #61666d;
+    color: var(--text-sub);
     line-height: 1.8;
   }
   .card-info .row { display: flex; align-items: center; gap: 6px; }
@@ -308,10 +409,10 @@
   .card-reward {
     margin-top: 10px;
     padding: 8px 12px;
-    background: #fffbe6;
+    background: var(--bg-warning);
     border-radius: 6px;
     font-size: 12px;
-    color: #ad8b00;
+    color: var(--text-warning);
     line-height: 1.5;
   }
   .card-match-badge {
@@ -344,7 +445,7 @@
   .empty-state {
     text-align: center;
     padding: 60px 20px;
-    color: #9499a0;
+    color: var(--text-faint);
   }
   .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
   .empty-state p { font-size: 15px; }
@@ -362,7 +463,7 @@
   }
   .modal-overlay.show { display: flex; }
   .modal {
-    background: #fff;
+    background: var(--bg-surface);
     border-radius: 16px;
     width: 100%;
     max-width: 640px;
@@ -380,21 +481,21 @@
     top: 16px; right: 16px;
     width: 32px; height: 32px;
     border: none;
-    background: #f4f5f7;
+    background: var(--bg-subtle);
     border-radius: 50%;
     font-size: 18px;
     cursor: pointer;
-    color: #61666d;
+    color: var(--text-sub);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 10;
   }
-  .modal-close:hover { background: #e3e5e7; }
+  .modal-close:hover { background: var(--border); }
   .modal-header {
     padding: 28px 28px 20px;
-    background: linear-gradient(135deg, #fff5f7 0%, #fff 100%);
-    border-bottom: 1px solid #f0f0f0;
+    background: var(--bg-accent);
+    border-bottom: 1px solid var(--border);
   }
   .modal-title {
     font-size: 22px;
@@ -409,7 +510,7 @@
   .modal-section h3 {
     font-size: 14px;
     font-weight: 700;
-    color: #18191c;
+    color: var(--text-main);
     margin-bottom: 8px;
     display: flex;
     align-items: center;
@@ -417,7 +518,7 @@
   }
   .modal-section p, .modal-section li {
     font-size: 14px;
-    color: #61666d;
+    color: var(--text-sub);
     line-height: 1.7;
   }
   .modal-section ul { padding-left: 20px; }
@@ -428,11 +529,11 @@
   }
   .info-item {
     padding: 12px 14px;
-    background: #f9f9fa;
+    background: var(--bg-surface-alt);
     border-radius: 8px;
   }
-  .info-item .label { font-size: 12px; color: #9499a0; margin-bottom: 4px; }
-  .info-item .value { font-size: 14px; font-weight: 600; color: #18191c; }
+  .info-item .label { font-size: 12px; color: var(--text-faint); margin-bottom: 4px; }
+  .info-item .value { font-size: 14px; font-weight: 600; color: var(--text-main); }
   .submit-guide {
     background: #e6f7ff;
     border-left: 3px solid #1890ff;
@@ -443,7 +544,7 @@
     line-height: 1.7;
   }
   .reward-box {
-    background: #fffbe6;
+    background: var(--bg-warning);
     border-left: 3px solid #faad14;
     padding: 14px 16px;
     border-radius: 0 8px 8px 0;
@@ -474,17 +575,17 @@
   }
   .btn-primary:hover { background: #f55d8a; }
   .btn-secondary {
-    background: #f4f5f7;
-    color: #61666d;
+    background: var(--bg-subtle);
+    color: var(--text-sub);
   }
-  .btn-secondary:hover { background: #e3e5e7; }
+  .btn-secondary:hover { background: var(--border); }
 
   /* 页脚 */
   .footer {
     text-align: center;
     padding: 30px 20px;
     font-size: 12px;
-    color: #9499a0;
+    color: var(--text-faint);
   }
   .footer a { color: #fb7299; text-decoration: none; }
 
@@ -531,39 +632,48 @@
     <div class="hint">输入你的视频主题/类型，系统会自动计算每个活动的匹配度，绿色边框 = 高度匹配</div>
   </div>
 
-  <!-- 筛选面板 -->
+  <!-- 筛选面板（四行筛选默认折叠，摘要行 + 搜索/排序常驻） -->
   <div class="filter-panel">
-    <div class="filter-row">
-      <span class="filter-label">分类</span>
-      <div class="filter-btns" id="categoryFilters"></div>
-    </div>
-    <div class="filter-row">
-      <span class="filter-label">剩余时间</span>
-      <div class="filter-btns" id="timeFilters">
-        <span class="filter-btn active" data-time="all">全部</span>
-        <span class="filter-btn" data-time="week">本周截止(≤7天)</span>
-        <span class="filter-btn" data-time="month">本月截止(≤30天)</span>
-        <span class="filter-btn" data-time="long">长期(>30天)</span>
+    <div class="filter-summary">
+      <span class="filter-summary-text" id="filterSummaryText">未添加筛选</span>
+      <div class="filter-summary-actions">
+        <button class="fav-toggle" id="favToggle" title="只看收藏的活动">☆ 只看收藏</button>
+        <button class="filter-toggle" id="filterToggle" aria-expanded="false">筛选条件 <span class="toggle-arrow">▾</span></button>
       </div>
     </div>
-    <div class="filter-row">
-      <span class="filter-label">奖励类型</span>
-      <div class="filter-btns" id="rewardFilters">
-        <span class="filter-btn active" data-reward="all">全部</span>
-        <span class="filter-btn" data-reward="现金瓜分">现金瓜分</span>
-        <span class="filter-btn" data-reward="固定奖金">固定奖金</span>
-        <span class="filter-btn" data-reward="流量扶持">流量扶持</span>
-        <span class="filter-btn" data-reward="游戏道具">游戏道具</span>
-        <span class="filter-btn" data-reward="周边抽奖">周边抽奖</span>
+    <div class="filter-expandable" id="filterExpandable">
+      <div class="filter-row">
+        <span class="filter-label">分类</span>
+        <div class="filter-btns" id="categoryFilters"></div>
       </div>
-    </div>
-    <div class="filter-row">
-      <span class="filter-label">参赛门槛</span>
-      <div class="filter-btns" id="difficultyFilters">
-        <span class="filter-btn active" data-diff="all">全部</span>
-        <span class="filter-btn" data-diff="低">低（投稿即参与）</span>
-        <span class="filter-btn" data-diff="中">中（有内容要求）</span>
-        <span class="filter-btn" data-diff="高">高（需特定技能）</span>
+      <div class="filter-row">
+        <span class="filter-label">剩余时间</span>
+        <div class="filter-btns" id="timeFilters">
+          <span class="filter-btn active" data-time="all">全部</span>
+          <span class="filter-btn" data-time="week">本周截止(≤7天)</span>
+          <span class="filter-btn" data-time="month">本月截止(≤30天)</span>
+          <span class="filter-btn" data-time="long">长期(>30天)</span>
+        </div>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">奖励类型</span>
+        <div class="filter-btns" id="rewardFilters">
+          <span class="filter-btn active" data-reward="all">全部</span>
+          <span class="filter-btn" data-reward="现金瓜分">现金瓜分</span>
+          <span class="filter-btn" data-reward="固定奖金">固定奖金</span>
+          <span class="filter-btn" data-reward="流量扶持">流量扶持</span>
+          <span class="filter-btn" data-reward="游戏道具">游戏道具</span>
+          <span class="filter-btn" data-reward="周边抽奖">周边抽奖</span>
+        </div>
+      </div>
+      <div class="filter-row">
+        <span class="filter-label">参赛门槛</span>
+        <div class="filter-btns" id="difficultyFilters">
+          <span class="filter-btn active" data-diff="all">全部</span>
+          <span class="filter-btn" data-diff="低">低（投稿即参与）</span>
+          <span class="filter-btn" data-diff="中">中（有内容要求）</span>
+          <span class="filter-btn" data-diff="高">高（需特定技能）</span>
+        </div>
       </div>
     </div>
     <div class="search-row">
@@ -575,6 +685,7 @@
         <option value="days-desc">按截止时间（远→近）</option>
         <option value="match-desc">按匹配度（高→低）</option>
         <option value="reward">按奖励丰厚程度</option>
+        <option value="fav-first">收藏优先</option>
       </select>
     </div>
   </div>
@@ -622,10 +733,39 @@ const state = {
   difficulty: 'all',
   search: '',
   sort: 'days-asc',
-  suitability: ''
+  suitability: '',
+  onlyFav: false
 };
 
 let ACTIVITIES = []; // 运行时数据，从API或本地fallback加载
+
+// ========== 收藏 ==========
+const FAV_KEY = 'baf_favorites';
+let favMap = new Map(); // id -> {id, title, url, endDate}
+
+function loadFavorites() {
+  try {
+    (JSON.parse(localStorage.getItem(FAV_KEY) || '[]')).forEach(f => favMap.set(f.id, f));
+  } catch (e) { console.warn('读取收藏失败', e); }
+}
+
+function saveFavorites() {
+  try {
+    localStorage.setItem(FAV_KEY, JSON.stringify([...favMap.values()]));
+  } catch (e) { console.warn('保存收藏失败', e); }
+}
+
+function toggleFavorite(id) {
+  if (favMap.has(id)) {
+    favMap.delete(id);
+  } else {
+    const a = ACTIVITIES.find(x => x.id === id);
+    if (a) favMap.set(id, { id: a.id, title: a.title, url: a.url, endDate: a.endDate });
+  }
+  saveFavorites();
+  renderCards();
+  renderCategoryFilters(); // 更新"只看收藏"等统计（若显示计数）
+}
 
 // ========== 工具函数（来自 BAFCore 三端共享，见根目录 core.js） ==========
 const { esc, debounce, daysLeft, formatDate, calcMatch, getMatchLevel, getMatchText, getCategoryIcon, getRewardWeight } = BAFCore;
@@ -660,6 +800,11 @@ function filterActivities() {
     list = list.filter(a => a.difficulty === state.difficulty);
   }
 
+  // 只看收藏
+  if (state.onlyFav) {
+    list = list.filter(a => favMap.has(a.id));
+  }
+
   // 搜索
   if (state.search) {
     const kw = state.search.toLowerCase();
@@ -680,13 +825,13 @@ function filterActivities() {
   } else if (state.sort === 'days-desc') {
     list.sort((a, b) => daysLeft(b.endDate) - daysLeft(a.endDate));
   } else if (state.sort === 'match-desc') {
-    list.sort((a, b) => {
-      const ma = calcMatch(a, state.suitability) || 0;
-      const mb = calcMatch(b, state.suitability) || 0;
-      return mb - ma;
-    });
+    // 预计算匹配度，避免排序比较器中每个元素重复计算正则
+    const matchCache = new Map(list.map(a => [a.id, calcMatch(a, state.suitability) || 0]));
+    list.sort((a, b) => (matchCache.get(b.id) || 0) - (matchCache.get(a.id) || 0));
   } else if (state.sort === 'reward') {
     list.sort((a, b) => getRewardWeight(b) - getRewardWeight(a));
+  } else if (state.sort === 'fav-first') {
+    list.sort((a, b) => (favMap.has(b.id) ? 1 : 0) - (favMap.has(a.id) ? 1 : 0) || daysLeft(a.endDate) - daysLeft(b.endDate));
   }
 
   return list;
@@ -717,11 +862,25 @@ function renderCategoryFilters() {
   });
 }
 
+// 筛选摘要：常驻显示当前筛选状态（面板收起时用户也能看到生效的筛选）
+function updateFilterSummary() {
+  const parts = [];
+  const timeText = { week: '≤7天', month: '≤30天', long: '>30天' }[state.time];
+  if (state.category !== 'all') parts.push(`分类:<strong>${esc(state.category)}</strong>`);
+  if (timeText) parts.push(`时间:<strong>${timeText}</strong>`);
+  if (state.reward !== 'all') parts.push(`奖励:<strong>${esc(state.reward)}</strong>`);
+  if (state.difficulty !== 'all') parts.push(`门槛:<strong>${esc(state.difficulty)}</strong>`);
+  if (state.search) parts.push(`搜索:<strong>${esc(state.search)}</strong>`);
+  if (state.onlyFav) parts.push('<strong>只看收藏</strong>');
+  document.getElementById('filterSummaryText').innerHTML = parts.length ? parts.join(' · ') : '未添加筛选';
+}
+
 function renderCards() {
   const list = filterActivities();
   const grid = document.getElementById('cardGrid');
   const empty = document.getElementById('emptyState');
   document.getElementById('resultCount').textContent = list.length;
+  updateFilterSummary();
 
   if (list.length === 0) {
     grid.innerHTML = '';
@@ -741,8 +900,10 @@ function renderCards() {
     const catIcon = getCategoryIcon(a.category, a.tags);
 
     return `
-      <div class="activity-card ${matchLevel === 'high' ? 'high-match' : ''} ${isEndingSoon ? 'ending-soon' : ''}" onclick="openModal(${Number(a.id) || 0})">
+      <div class="activity-card ${matchLevel === 'high' ? 'high-match' : ''} ${favMap.has(a.id) ? 'is-fav' : ''}" onclick="openModal(${Number(a.id) || 0})">
         <div class="card-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${esc(catIcon.label)}">${catIcon.icon}</div>
+        <button class="fav-btn ${favMap.has(a.id) ? 'active' : ''}" title="${favMap.has(a.id) ? '取消收藏' : '收藏此活动'}" onclick="event.stopPropagation();toggleFavorite(${Number(a.id) || 0})">${favMap.has(a.id) ? '⭐' : '☆'}</button>
+        ${isEndingSoon ? `<div class="card-ending"><span class="ending-badge">⏰ ${days === 0 ? '今天截止' : `${days}天后截止`}</span></div>` : ''}
         <div class="card-header">
           <div class="card-title" style="padding-left:36px;">${esc(a.title)}</div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:120px;">
@@ -864,6 +1025,30 @@ document.addEventListener('keydown', (e) => {
 
 // ========== 事件绑定 ==========
 function bindEvents() {
+  // 筛选面板折叠（记忆展开状态，默认收起压缩首屏）
+  const expandable = document.getElementById('filterExpandable');
+  const toggleBtn = document.getElementById('filterToggle');
+  if (localStorage.getItem('baf_panel_open') === '1') {
+    expandable.classList.add('open');
+    toggleBtn.classList.add('open');
+    toggleBtn.setAttribute('aria-expanded', 'true');
+  }
+  toggleBtn.addEventListener('click', () => {
+    const open = expandable.classList.toggle('open');
+    toggleBtn.classList.toggle('open', open);
+    toggleBtn.setAttribute('aria-expanded', String(open));
+    localStorage.setItem('baf_panel_open', open ? '1' : '0');
+  });
+
+  // 只看收藏
+  document.getElementById('favToggle').addEventListener('click', () => {
+    state.onlyFav = !state.onlyFav;
+    const btn = document.getElementById('favToggle');
+    btn.classList.toggle('active', state.onlyFav);
+    btn.textContent = state.onlyFav ? '⭐ 只看收藏' : '☆ 只看收藏';
+    renderCards();
+  });
+
   // 时间筛选
   document.querySelectorAll('#timeFilters .filter-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1021,6 +1206,7 @@ function updateStats() {
 // ========== 初始化 ==========
 async function init() {
   bindEvents();
+  loadFavorites();
 
   // 加载数据
   await loadActivities();

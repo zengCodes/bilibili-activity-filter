@@ -4,7 +4,7 @@
   "version": "1.0.3",
   "description": "__MSG_extDesc__",
   "default_locale": "zh_CN",
-  "permissions": ["storage", "activeTab"],
+  "permissions": ["storage", "activeTab", "alarms", "notifications"],
   "host_permissions": [
     "https://www.bilibili.com/*",
     "https://api.bilibili.com/*"

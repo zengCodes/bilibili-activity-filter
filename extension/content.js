@@ -23,6 +23,44 @@
   // ========== 工具函数（来自 BAFCore 三端共享，见根目录 core.js） ==========
   const { esc, debounce, daysLeft, formatDate, calcMatch, getMatchLevel, getCategoryIcon, fetchRawActivities, browserFetchOne, transformActivities } = BAFCore;
 
+  // ========== 收藏 ==========
+  let favMap = new Map(); // id -> {id, title, url, endDate}，数据源 settings.savedActivities（chrome.storage.sync）
+
+  function refreshFavMap() {
+    favMap = new Map((settings.savedActivities || []).map(f => [f.id, f]));
+  }
+
+  async function toggleFav(id) {
+    const list = settings.savedActivities || [];
+    const idx = list.findIndex(f => f.id === id);
+    if (idx >= 0) {
+      list.splice(idx, 1);
+    } else {
+      const a = activities.find(x => x.id === id);
+      if (a) list.push({ id: a.id, title: a.title, url: a.url, endDate: a.endDate });
+    }
+    settings.savedActivities = list;
+    refreshFavMap();
+    saveSettings();
+    renderActivityList();
+  }
+
+  // ========== 暗色模式检测 ==========
+  // B站页面深色模式是站点自身实现的（不跟随系统），所以优先探测页面背景亮度，系统偏好作为补充
+  function applyDarkMode() {
+    let dark = false;
+    try {
+      const bg = getComputedStyle(document.body).backgroundColor;
+      const m = bg.match(/\d+/g);
+      if (m && m.length >= 3) {
+        const [r, g, b] = m.map(Number);
+        dark = (r * 0.299 + g * 0.587 + b * 0.114) < 128;
+      }
+      if (!dark && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) dark = true;
+    } catch (e) { /* 忽略 */ }
+    document.documentElement.classList.toggle('baf-dark', dark);
+  }
+
   // ========== 数据加载 ==========
   async function loadData() {
     try {
@@ -38,6 +76,7 @@
       if (resp.success) {
         activities = resp.data;
         if (resp.stale) console.warn('[B站活动筛选助手] 使用的是过期缓存数据');
+        refreshFavMap();
         return true;
       }
       throw new Error(resp.error || '获取失败');
@@ -104,7 +143,11 @@
     } else if (f.sort === 'days-desc') {
       list.sort((a, b) => daysLeft(b.endDate) - daysLeft(a.endDate));
     } else if (f.sort === 'match-desc') {
-      list.sort((a, b) => (calcMatch(b, settings.videoType) || 0) - (calcMatch(a, settings.videoType) || 0));
+      // 预计算匹配度，避免排序比较器中每个元素重复计算正则
+      const matchCache = new Map(list.map(a => [a.id, calcMatch(a, settings.videoType) || 0]));
+      list.sort((a, b) => (matchCache.get(b.id) || 0) - (matchCache.get(a.id) || 0));
+    } else if (f.sort === 'fav-first') {
+      list.sort((a, b) => (favMap.has(b.id) ? 1 : 0) - (favMap.has(a.id) ? 1 : 0) || daysLeft(a.endDate) - daysLeft(b.endDate));
     }
 
     return list;
@@ -161,6 +204,7 @@
           <option value="days-asc">截止时间（近→远）</option>
           <option value="days-desc">截止时间（远→近）</option>
           <option value="match-desc">匹配度（高→低）</option>
+          <option value="fav-first">收藏优先</option>
         </select>
       </div>
     `;
@@ -235,6 +279,7 @@
       const matchLevel = getMatchLevel(match);
       const isHighMatch = matchLevel === 'high';
       const isEndingSoon = days >= 0 && days <= 7;
+      const isFav = favMap.has(a.id);
       const daysClass = days <= 7 ? 'baf-days-urgent' : days <= 30 ? 'baf-days-normal' : 'baf-days-long';
       const daysText = days < 0 ? '已结束' : days === 0 ? '今天截止' : `剩余${days}天`;
 
@@ -255,7 +300,9 @@
           : `<span class="baf-badge baf-badge-low" style="display:inline-block;">匹配度 ${match}%</span>`;
 
       return `
-        <div class="baf-activity-item ${isHighMatch ? 'baf-high-match' : ''} ${isEndingSoon ? 'baf-ending-soon' : ''}" data-url="${esc(a.url)}" data-id="${Number(a.id) || 0}">
+        <div class="baf-activity-item ${isHighMatch ? 'baf-high-match' : ''} ${isFav ? 'is-fav' : ''}" data-url="${esc(a.url)}" data-id="${Number(a.id) || 0}">
+          <button class="baf-fav-btn ${isFav ? 'active' : ''}" title="${isFav ? '取消收藏' : '收藏此活动'}">${isFav ? '⭐' : '☆'}</button>
+          ${isEndingSoon ? `<div style="margin-bottom:6px;"><span class="baf-ending-badge">⏰ ${days === 0 ? '今天截止' : `${days}天后截止`}</span></div>` : ''}
           <div class="baf-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${esc(catIcon.label)}">${catIcon.icon}</div>
           <div class="baf-activity-item-title">${esc(a.title)}</div>
           <div class="baf-activity-item-cats">
@@ -282,9 +329,14 @@
       `;
     }).join('');
 
-    // 绑定点击事件
+    // 绑定点击事件（星标按钮切换收藏，其余区域打开活动页）
     listContainer.querySelectorAll('.baf-activity-item').forEach(item => {
-      item.addEventListener('click', () => {
+      item.addEventListener('click', (e) => {
+        if (e.target.classList && e.target.classList.contains('baf-fav-btn')) {
+          e.stopPropagation();
+          toggleFav(Number(item.dataset.id));
+          return;
+        }
         const url = item.dataset.url;
         if (url) window.open(url, '_blank');
       });
@@ -355,6 +407,11 @@
   // ========== 初始化 ==========
   async function init() {
     console.log('[B站活动筛选助手] 正在初始化...');
+
+    // 暗色模式：检测页面背景亮度并跟随；B站切换主题时（html class 变化）自动重新检测
+    applyDarkMode();
+    const themeObserver = new MutationObserver(applyDarkMode);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
     // 显示加载状态
     const loading = document.createElement('div');

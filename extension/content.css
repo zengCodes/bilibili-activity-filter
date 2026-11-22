@@ -1,11 +1,41 @@
 /* B站活动筛选助手 - 注入样式 */
 
+/* 主题变量：默认浅色；.baf-dark（由 content.js 检测B站页面深色模式/系统偏好后挂载）覆盖为深色 */
+:root {
+  --baf-bg: #fff;
+  --baf-bg-subtle: #f4f5f7;
+  --baf-bg-accent: #fff5f7;
+  --baf-accent-border: #ffd6e0;
+  --baf-bg-warning: #fffbe6;
+  --baf-bg-match-high: linear-gradient(135deg, #f6ffed 0%, #fff 60%);
+  --baf-text-main: #18191c;
+  --baf-text-sub: #61666d;
+  --baf-text-faint: #9499a0;
+  --baf-text-warning: #ad8b00;
+  --baf-border: #e3e5e7;
+  --baf-brand: #fb7299;
+  --baf-contrast: #fff;
+}
+.baf-dark {
+  --baf-bg: #1e1e20;
+  --baf-bg-subtle: #2a2a2d;
+  --baf-bg-accent: #2a1f24;
+  --baf-accent-border: #3a3a3f;
+  --baf-bg-warning: #322a12;
+  --baf-bg-match-high: #16251a;
+  --baf-text-main: #e8e8ea;
+  --baf-text-sub: #a8a8b0;
+  --baf-text-faint: #70707a;
+  --baf-text-warning: #d9b13b;
+  --baf-border: #3a3a3f;
+}
+
 /* 筛选工具栏 */
 .bili-activity-filter-toolbar {
   position: sticky;
   top: 0;
   z-index: 1000;
-  background: #fff;
+  background: var(--baf-bg);
   border-bottom: 2px solid #fb7299;
   padding: 12px 20px;
   margin-bottom: 16px;
@@ -37,7 +67,7 @@
 
 .baf-stats {
   font-size: 12px;
-  color: #61666d;
+  color: var(--baf-text-sub);
 }
 
 .baf-stats strong {
@@ -55,7 +85,7 @@
 
 .baf-filter-label {
   font-size: 12px;
-  color: #9499a0;
+  color: var(--baf-text-faint);
   font-weight: 600;
   min-width: 50px;
   flex-shrink: 0;
@@ -69,11 +99,11 @@
 
 .baf-filter-btn {
   padding: 3px 10px;
-  border: 1px solid #e3e5e7;
+  border: 1px solid var(--baf-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--baf-bg);
   font-size: 12px;
-  color: #61666d;
+  color: var(--baf-text-sub);
   cursor: pointer;
   transition: all 0.15s;
   user-select: none;
@@ -87,7 +117,7 @@
 .baf-filter-btn.active {
   background: #fb7299;
   border-color: #fb7299;
-  color: #fff;
+  color: var(--baf-contrast);
 }
 
 .baf-search-row {
@@ -99,7 +129,7 @@
 .baf-search-input {
   flex: 1;
   padding: 6px 12px;
-  border: 1px solid #e3e5e7;
+  border: 1px solid var(--baf-border);
   border-radius: 6px;
   font-size: 13px;
   outline: none;
@@ -111,10 +141,10 @@
 
 .baf-select {
   padding: 6px 10px;
-  border: 1px solid #e3e5e7;
+  border: 1px solid var(--baf-border);
   border-radius: 6px;
   font-size: 12px;
-  background: #fff;
+  background: var(--baf-bg);
   cursor: pointer;
   outline: none;
 }
@@ -122,11 +152,11 @@
 .baf-video-type-input {
   width: 200px;
   padding: 6px 10px;
-  border: 1px solid #ffd6e0;
+  border: 1px solid var(--baf-accent-border);
   border-radius: 6px;
   font-size: 12px;
   outline: none;
-  background: #fff5f7;
+  background: var(--baf-bg-accent);
 }
 
 .baf-video-type-input:focus {
@@ -141,22 +171,41 @@
 
 .baf-activity-card.baf-high-match {
   border: 2px solid #52c41a !important;
-  background: linear-gradient(135deg, #f6ffed 0%, #fff 60%) !important;
+  background: var(--baf-bg-match-high) !important;
 }
 
-.baf-activity-card.baf-ending-soon::after {
-  content: "即将截止";
-  position: absolute;
-  top: 8px;
-  right: -28px;
+/* 即将截止胶囊徽章（替代 45° 丝带，不遮挡内容且显示具体天数） */
+.baf-ending-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
   background: #ff4d4f;
   color: #fff;
   font-size: 10px;
-  padding: 2px 28px;
-  transform: rotate(45deg);
   font-weight: 600;
-  z-index: 10;
 }
+
+/* 收藏星标 */
+.baf-fav-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 12;
+  line-height: 1;
+  opacity: 0.45;
+  transition: all 0.15s;
+  filter: grayscale(1);
+  padding: 0;
+}
+.baf-fav-btn:hover { opacity: 1; transform: scale(1.15); }
+.baf-fav-btn.active { opacity: 1; filter: none; }
+.baf-activity-item.is-fav { border-color: #faad14 !important; }
 
 .baf-card-badges {
   position: absolute;
@@ -173,7 +222,7 @@
   border-radius: 4px;
   font-size: 10px;
   font-weight: 600;
-  color: #fff;
+  color: var(--baf-contrast);
 }
 
 .baf-badge-days {
@@ -197,14 +246,14 @@
 }
 
 .baf-badge-low {
-  background: #9499a0;
+  background: var(--baf-text-faint);
 }
 
 /* 活动详情悬浮卡片 */
 .baf-tooltip {
   position: fixed;
   z-index: 2000;
-  background: #fff;
+  background: var(--baf-bg);
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
   padding: 14px 16px;
@@ -223,23 +272,23 @@
   font-size: 14px;
   font-weight: 700;
   margin-bottom: 8px;
-  color: #18191c;
+  color: var(--baf-text-main);
 }
 
 .baf-tooltip-row {
-  color: #61666d;
+  color: var(--baf-text-sub);
   margin-bottom: 4px;
 }
 
 .baf-tooltip-row strong {
-  color: #18191c;
+  color: var(--baf-text-main);
 }
 
 /* 加载状态 */
 .baf-loading {
   text-align: center;
   padding: 40px;
-  color: #9499a0;
+  color: var(--baf-text-faint);
   font-size: 14px;
 }
 
@@ -272,12 +321,12 @@
 }
 
 .baf-activity-item {
-  background: #fff;
+  background: var(--baf-bg);
   border-radius: 8px;
   padding: 14px;
   cursor: pointer;
   transition: all 0.2s;
-  border: 1px solid #e3e5e7;
+  border: 1px solid var(--baf-border);
   position: relative;
   overflow: hidden;
 }
@@ -306,7 +355,7 @@
 .baf-activity-item-title {
   font-size: 14px;
   font-weight: 600;
-  color: #18191c;
+  color: var(--baf-text-main);
   margin-bottom: 6px;
   line-height: 1.4;
   padding-left: 36px;
@@ -335,25 +384,25 @@
 
 .baf-activity-item-tag {
   padding: 1px 6px;
-  background: #f4f5f7;
+  background: var(--baf-bg-subtle);
   border-radius: 3px;
   font-size: 10px;
-  color: #61666d;
+  color: var(--baf-text-sub);
 }
 
 .baf-activity-item-info {
   font-size: 11px;
-  color: #9499a0;
+  color: var(--baf-text-faint);
   line-height: 1.6;
 }
 
 .baf-activity-item-reward {
   margin-top: 8px;
   padding: 6px 8px;
-  background: #fffbe6;
+  background: var(--baf-bg-warning);
   border-radius: 4px;
   font-size: 11px;
-  color: #ad8b00;
+  color: var(--baf-text-warning);
 }
 
 .baf-activity-item-footer {
@@ -371,6 +420,6 @@
 .baf-empty {
   text-align: center;
   padding: 60px 20px;
-  color: #9499a0;
+  color: var(--baf-text-faint);
   grid-column: 1 / -1;
 }
