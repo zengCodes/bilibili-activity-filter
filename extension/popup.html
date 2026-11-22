@@ -25,7 +25,7 @@
     flex-shrink: 0;
     background: linear-gradient(135deg, #fb7299 0%, #ff9eb5 100%);
     color: #fff;
-    padding: 16px;
+    padding: 10px 16px;
   }
   .header h1 { font-size: 16px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
   .header h1 img { width: 28px; height: 28px; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
@@ -40,7 +40,7 @@
   .stats strong { font-size: 14px; }
 
   .section {
-    padding: 12px 16px;
+    padding: 10px 16px;
     background: #fff;
     margin-bottom: 8px;
   }
@@ -84,14 +84,17 @@
     border-color: #fb7299;
   }
 
-  /* 两个盒子独立滚动：收藏列表限高（内容多时内部滚），截止列表占满剩余空间 */
+  /* 两个盒子独立滚动，内容多时都保底完整显示约 2 个条目（单条约 57px）：
+     收藏盒高度随内容自适应、限高 118px 内部滚动（≥2 条即完整可见）；
+     截止盒占满剩余空间，min-height 保底 2 条（满载时不被收藏盒挤压）。
+     空态/内容少时盒子随之收缩，不占无效空间 */
   #favList {
-    max-height: 140px;
+    max-height: 118px;
     overflow-y: auto;
   }
   #endingList {
     flex: 1;
-    min-height: 0;
+    min-height: 115px;
     overflow-y: auto;
   }
   .activity-item {
@@ -171,7 +174,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   .footer {
-    padding: 10px 16px;
+    padding: 8px 16px;
     text-align: center;
     font-size: 10px;
     color: #9499a0;
