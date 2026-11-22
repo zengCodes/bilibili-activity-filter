@@ -220,7 +220,8 @@
       if (saved) {
         const parsed = JSON.parse(saved);
         settings = { ...settings, ...parsed };
-        if (!settings.filters) settings.filters = {};
+        // 旧版本存档可能缺字段：先铺默认值再覆盖，保证高亮恢复与实际筛选一致
+        settings.filters = { category: 'all', time: 'all', reward: 'all', difficulty: 'all', search: '', sort: 'days-asc', ...(settings.filters || {}) };
         if (!settings.favorites) settings.favorites = [];
       }
     } catch (e) { console.warn('读取设置失败', e); }
@@ -327,36 +328,36 @@
       <div class="baf-filter-row">
         <span class="baf-filter-label">分类</span>
         <div class="baf-filter-btns" id="baf-cat-btns">
-          <span class="baf-filter-btn active" data-cat="all">全部</span>
-          ${categories.map(c => `<span class="baf-filter-btn" data-cat="${c}">${c}</span>`).join('')}
+          <span class="baf-filter-btn ${settings.filters.category === 'all' ? 'active' : ''}" data-cat="all">全部</span>
+          ${categories.map(c => `<span class="baf-filter-btn ${settings.filters.category === c ? 'active' : ''}" data-cat="${c}">${c}</span>`).join('')}
         </div>
       </div>
       <div class="baf-filter-row">
         <span class="baf-filter-label">时间</span>
         <div class="baf-filter-btns" id="baf-time-btns">
-          <span class="baf-filter-btn active" data-time="all">全部</span>
-          <span class="baf-filter-btn" data-time="week">本周截止</span>
-          <span class="baf-filter-btn" data-time="month">本月截止</span>
-          <span class="baf-filter-btn" data-time="long">长期</span>
+          <span class="baf-filter-btn ${settings.filters.time === 'all' ? 'active' : ''}" data-time="all">全部</span>
+          <span class="baf-filter-btn ${settings.filters.time === 'week' ? 'active' : ''}" data-time="week">本周截止</span>
+          <span class="baf-filter-btn ${settings.filters.time === 'month' ? 'active' : ''}" data-time="month">本月截止</span>
+          <span class="baf-filter-btn ${settings.filters.time === 'long' ? 'active' : ''}" data-time="long">长期</span>
         </div>
         <span class="baf-filter-label" style="margin-left:16px;">奖励</span>
         <div class="baf-filter-btns" id="baf-reward-btns">
-          <span class="baf-filter-btn active" data-reward="all">全部</span>
-          <span class="baf-filter-btn" data-reward="现金瓜分">现金瓜分</span>
-          <span class="baf-filter-btn" data-reward="固定奖金">固定奖金</span>
-          <span class="baf-filter-btn" data-reward="流量扶持">流量扶持</span>
-          <span class="baf-filter-btn" data-reward="游戏道具">游戏道具</span>
-          <span class="baf-filter-btn" data-reward="周边抽奖">周边抽奖</span>
+          <span class="baf-filter-btn ${settings.filters.reward === 'all' ? 'active' : ''}" data-reward="all">全部</span>
+          <span class="baf-filter-btn ${settings.filters.reward === '现金瓜分' ? 'active' : ''}" data-reward="现金瓜分">现金瓜分</span>
+          <span class="baf-filter-btn ${settings.filters.reward === '固定奖金' ? 'active' : ''}" data-reward="固定奖金">固定奖金</span>
+          <span class="baf-filter-btn ${settings.filters.reward === '流量扶持' ? 'active' : ''}" data-reward="流量扶持">流量扶持</span>
+          <span class="baf-filter-btn ${settings.filters.reward === '游戏道具' ? 'active' : ''}" data-reward="游戏道具">游戏道具</span>
+          <span class="baf-filter-btn ${settings.filters.reward === '周边抽奖' ? 'active' : ''}" data-reward="周边抽奖">周边抽奖</span>
         </div>
       </div>
       <div class="baf-search-row">
-        <input type="text" class="baf-search-input" id="baf-search" placeholder="搜索活动名称、标签..." />
+        <input type="text" class="baf-search-input" id="baf-search" placeholder="搜索活动名称、标签..." value="${esc(settings.filters.search || '')}" />
         <input type="text" class="baf-video-type-input" id="baf-video-type" placeholder="我的视频类型（如：影视解说）" value="${esc(settings.videoType || '')}" />
         <select class="baf-select" id="baf-sort">
-          <option value="days-asc">截止时间（近→远）</option>
-          <option value="fav-first">收藏优先</option>
-          <option value="days-desc">截止时间（远→近）</option>
-          <option value="match-desc">匹配度（高→低）</option>
+          <option value="days-asc" ${settings.filters.sort === 'days-asc' ? 'selected' : ''}>截止时间（近→远）</option>
+          <option value="fav-first" ${settings.filters.sort === 'fav-first' ? 'selected' : ''}>收藏优先</option>
+          <option value="days-desc" ${settings.filters.sort === 'days-desc' ? 'selected' : ''}>截止时间（远→近）</option>
+          <option value="match-desc" ${settings.filters.sort === 'match-desc' ? 'selected' : ''}>匹配度（高→低）</option>
         </select>
       </div>
     `;

@@ -1,6 +1,6 @@
 {
   "name": "bilibili-activity-filter",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "description": "B站活动筛选工具 - 实时获取B站投稿活动数据",
   "main": "server.js",
   "scripts": {
