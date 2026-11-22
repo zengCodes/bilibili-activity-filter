@@ -41,6 +41,10 @@
   margin-bottom: 16px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  /* B站页面 html { font-size: 100px }（rem 方案），必须在容器显式声明基础字号，
+     否则未声明字号的流内子元素会继承 100px，line-height:normal 撑出百像素行盒 */
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .baf-header {
@@ -175,6 +179,12 @@
 }
 
 /* 即将截止胶囊徽章（替代 45° 丝带，不遮挡内容且显示具体天数） */
+/* 包裹层用类而非 inline style：保证字号/行高随容器，不会被B站 100px 字体污染；
+   padding-left 与标题的 36px 对齐，给左上角 absolute 的分类图标徽章让位，避免同排重叠 */
+.baf-ending-wrap {
+  margin-bottom: 6px;
+  padding-left: 36px;
+}
 .baf-ending-badge {
   display: inline-block;
   padding: 2px 8px;
@@ -183,6 +193,10 @@
   color: #fff;
   font-size: 10px;
   font-weight: 600;
+}
+/* 匹配度徽章包裹层（同理） */
+.baf-match-wrap {
+  margin-top: 6px;
 }
 
 /* 收藏星标 */
@@ -318,6 +332,9 @@
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
   padding: 0 20px 20px;
+  /* 同工具栏：显式声明基础字号，切断 B站 html font-size:100px 的继承污染 */
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .baf-activity-item {
@@ -329,6 +346,8 @@
   border: 1px solid var(--baf-border);
   position: relative;
   overflow: hidden;
+  /* 白卡片贴白页面需要淡阴影拉开层次 */
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
 .baf-cat-badge {

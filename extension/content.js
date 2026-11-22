@@ -46,17 +46,34 @@
   }
 
   // ========== 暗色模式检测 ==========
-  // B站页面深色模式是站点自身实现的（不跟随系统），所以优先探测页面背景亮度，系统偏好作为补充
+  // B站页面深色模式是站点自身实现的（不跟随系统），所以跟随页面实际背景：
+  // 从 body → html 找第一个非透明背景色判定亮度；都没有时按浏览器默认白画布处理，
+  // 仅当页面显式声明 color-scheme: dark 才用暗色（不退回系统偏好，避免白页面配黑 UI）。
+  // 注意：rgba(0,0,0,0) 是"未声明背景"而非黑色，不能按亮度 0 误判成暗色。
   function applyDarkMode() {
     let dark = false;
     try {
-      const bg = getComputedStyle(document.body).backgroundColor;
-      const m = bg.match(/\d+/g);
-      if (m && m.length >= 3) {
-        const [r, g, b] = m.map(Number);
-        dark = (r * 0.299 + g * 0.587 + b * 0.114) < 128;
+      let lum = null;
+      for (const el of [document.body, document.documentElement]) {
+        if (!el) continue;
+        const bg = getComputedStyle(el).backgroundColor;
+        const m = bg && bg.match(/rgba?\(([^)]+)\)/);
+        if (!m) continue;
+        const p = m[1].split(',').map(s => parseFloat(s));
+        if (p.length < 3) continue;
+        if (p.length >= 4 && p[3] === 0) continue; // 全透明，继续向上找
+        lum = p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114;
+        break;
       }
-      if (!dark && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) dark = true;
+      if (lum !== null) {
+        dark = lum < 128; // 页面有明确背景 → 跟随页面
+      } else {
+        // 页面未声明背景：浏览器默认以白色画布渲染，UI 也用浅色；
+        // 仅当页面显式声明 color-scheme: dark 时才用暗色。
+        // 不能退回系统偏好，否则系统深色 + 浅色页面会再次出现"黑块贴白纸"
+        const scheme = String(getComputedStyle(document.documentElement).colorScheme || '').toLowerCase();
+        dark = scheme.includes('dark');
+      }
     } catch (e) { /* 忽略 */ }
     document.documentElement.classList.toggle('baf-dark', dark);
   }
@@ -302,7 +319,7 @@
       return `
         <div class="baf-activity-item ${isHighMatch ? 'baf-high-match' : ''} ${isFav ? 'is-fav' : ''}" data-url="${esc(a.url)}" data-id="${Number(a.id) || 0}">
           <button class="baf-fav-btn ${isFav ? 'active' : ''}" title="${isFav ? '取消收藏' : '收藏此活动'}">${isFav ? '⭐' : '☆'}</button>
-          ${isEndingSoon ? `<div style="margin-bottom:6px;"><span class="baf-ending-badge">⏰ ${days === 0 ? '今天截止' : `${days}天后截止`}</span></div>` : ''}
+          ${isEndingSoon ? `<div class="baf-ending-wrap"><span class="baf-ending-badge">⏰ ${days === 0 ? '今天截止' : `${days}天后截止`}</span></div>` : ''}
           <div class="baf-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${esc(catIcon.label)}">${catIcon.icon}</div>
           <div class="baf-activity-item-title">${esc(a.title)}</div>
           <div class="baf-activity-item-cats">
@@ -320,7 +337,7 @@
             📂 ${esc(a.submitZone)}
           </div>
           <div class="baf-activity-item-reward">💰 ${esc(a.rewardType)}：${esc(a.rewardDesc)}</div>
-          ${matchBadge ? `<div style="margin-top:6px;">${matchBadge}</div>` : ''}
+          ${matchBadge ? `<div class="baf-match-wrap">${matchBadge}</div>` : ''}
           <div class="baf-activity-item-footer">
             <span class="${daysClass}">${daysText}</span>
             ${a.url ? '<span style="color:#fb7299;">点击投稿 →</span>' : ''}
@@ -408,10 +425,11 @@
   async function init() {
     console.log('[B站活动筛选助手] 正在初始化...');
 
-    // 暗色模式：检测页面背景亮度并跟随；B站切换主题时（html class 变化）自动重新检测
+    // 暗色模式：跟随页面背景；B站切换主题时（html/body class 变化）自动重新检测
     applyDarkMode();
     const themeObserver = new MutationObserver(applyDarkMode);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    if (document.body) themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
     // 显示加载状态
     const loading = document.createElement('div');

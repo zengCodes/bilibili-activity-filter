@@ -53,6 +53,9 @@
       border-bottom: 2px solid #fb7299; padding: 12px 20px; margin-bottom: 16px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.08);
       font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      /* B站页面 html { font-size: 100px }（rem 方案），必须在容器显式声明基础字号，
+         否则未声明字号的流内子元素会继承 100px，line-height:normal 撑出百像素行盒 */
+      font-size: 13px; line-height: 1.5;
     }
     .baf-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
     .baf-title { font-size: 15px; font-weight: 700; color: #fb7299; display: flex; align-items: center; gap: 6px; }
@@ -83,10 +86,14 @@
     .baf-activity-list {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
       gap: 12px; padding: 0 20px 20px;
+      /* 同工具栏：显式声明基础字号，切断 B站 html font-size:100px 的继承污染 */
+      font-size: 13px; line-height: 1.5;
     }
     .baf-activity-item {
       background: var(--baf-bg); border-radius: 8px; padding: 14px; cursor: pointer; transition: all 0.2s;
       border: 1px solid var(--baf-border); position: relative; overflow: hidden;
+      /* 白卡片贴白页面需要淡阴影拉开层次 */
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
     .baf-cat-badge {
       position: absolute; top: 8px; left: 8px; width: 28px; height: 28px; border-radius: 6px;
@@ -118,10 +125,15 @@
     }
     .baf-fav-btn:hover { opacity: 1; transform: scale(1.15); }
     .baf-fav-btn.active { opacity: 1; filter: none; }
+    /* 包裹层用类而非 inline style：保证字号/行高随容器，不会被B站 100px 字体污染；
+       padding-left 与标题的 36px 对齐，给左上角 absolute 的分类图标徽章让位，避免同排重叠 */
+    .baf-ending-wrap { margin-bottom: 6px; padding-left: 36px; }
     .baf-ending-badge {
       display: inline-block; padding: 2px 8px; border-radius: 10px;
       background: #ff4d4f; color: #fff; font-size: 10px; font-weight: 600;
     }
+    /* 匹配度徽章包裹层（同理） */
+    .baf-match-wrap { margin-top: 6px; }
     .baf-empty { text-align: center; padding: 60px 20px; color: var(--baf-text-faint); grid-column: 1 / -1; }
   `;
   document.head.appendChild(style);
@@ -169,17 +181,34 @@
   }
 
   // ========== 暗色模式检测 ==========
-  // 优先探测B站页面背景亮度（站点深色模式不跟随系统），系统偏好作为补充
+  // B站页面深色模式是站点自身实现的（不跟随系统），所以跟随页面实际背景：
+  // 从 body → html 找第一个非透明背景色判定亮度；都没有时按浏览器默认白画布处理，
+  // 仅当页面显式声明 color-scheme: dark 才用暗色（不退回系统偏好，避免白页面配黑 UI）。
+  // 注意：rgba(0,0,0,0) 是"未声明背景"而非黑色，不能按亮度 0 误判成暗色。
   function applyDarkMode() {
     let dark = false;
     try {
-      const bg = getComputedStyle(document.body).backgroundColor;
-      const m = bg.match(/\d+/g);
-      if (m && m.length >= 3) {
-        const [r, g, b] = m.map(Number);
-        dark = (r * 0.299 + g * 0.587 + b * 0.114) < 128;
+      let lum = null;
+      for (const el of [document.body, document.documentElement]) {
+        if (!el) continue;
+        const bg = getComputedStyle(el).backgroundColor;
+        const m = bg && bg.match(/rgba?\(([^)]+)\)/);
+        if (!m) continue;
+        const p = m[1].split(',').map(s => parseFloat(s));
+        if (p.length < 3) continue;
+        if (p.length >= 4 && p[3] === 0) continue; // 全透明，继续向上找
+        lum = p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114;
+        break;
       }
-      if (!dark && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) dark = true;
+      if (lum !== null) {
+        dark = lum < 128; // 页面有明确背景 → 跟随页面
+      } else {
+        // 页面未声明背景：浏览器默认以白色画布渲染，UI 也用浅色；
+        // 仅当页面显式声明 color-scheme: dark 时才用暗色。
+        // 不能退回系统偏好，否则系统深色 + 浅色页面会再次出现"黑块贴白纸"
+        const scheme = String(getComputedStyle(document.documentElement).colorScheme || '').toLowerCase();
+        dark = scheme.includes('dark');
+      }
     } catch (e) { /* 忽略 */ }
     document.documentElement.classList.toggle('baf-dark', dark);
   }
@@ -391,7 +420,7 @@
       return `
         <div class="baf-activity-item ${isHighMatch ? 'baf-high-match' : ''} ${isFav ? 'is-fav' : ''}" data-url="${esc(a.url)}" data-id="${Number(a.id) || 0}">
           <button class="baf-fav-btn ${isFav ? 'active' : ''}" title="${isFav ? '取消收藏' : '收藏此活动'}">${isFav ? '⭐' : '☆'}</button>
-          ${isEndingSoon ? `<div style="margin-bottom:6px;"><span class="baf-ending-badge">⏰ ${days === 0 ? '今天截止' : `${days}天后截止`}</span></div>` : ''}
+          ${isEndingSoon ? `<div class="baf-ending-wrap"><span class="baf-ending-badge">⏰ ${days === 0 ? '今天截止' : `${days}天后截止`}</span></div>` : ''}
           <div class="baf-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${esc(catIcon.label)}">${catIcon.icon}</div>
           <div class="baf-activity-item-title">${esc(a.title)}</div>
           <div class="baf-activity-item-cats">
@@ -409,7 +438,7 @@
             📂 ${esc(a.submitZone)}
           </div>
           <div class="baf-activity-item-reward">💰 ${esc(a.rewardType)}：${esc(a.rewardDesc)}</div>
-          ${matchBadge ? `<div style="margin-top:6px;">${matchBadge}</div>` : ''}
+          ${matchBadge ? `<div class="baf-match-wrap">${matchBadge}</div>` : ''}
           <div class="baf-activity-item-footer">
             <span class="${daysClass}">${daysText}</span>
             ${a.url ? '<span style="color:#fb7299;">点击投稿 →</span>' : ''}
@@ -491,6 +520,7 @@
     applyDarkMode();
     const themeObserver = new MutationObserver(applyDarkMode);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    if (document.body) themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
     const loading = document.createElement('div');
     loading.id = 'baf-loading';
