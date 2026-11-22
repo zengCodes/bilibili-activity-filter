@@ -9,6 +9,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "pack": "npm run build && node scripts/pack.js",
+    "release": "npm version patch --no-git-tag-version && npm run pack",
     "update-data": "node scripts/update-data.js"
   },
   "keywords": ["bilibili", "activity", "filter"],
