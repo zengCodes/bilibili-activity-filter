@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* 自定义滚动条：细圆角低调灰，悬停显品牌粉（popup 独立文档，全局生效不影响宿主页面） */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d6d9de; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #fb7299; }
+  ::-webkit-scrollbar-corner { background: transparent; }
   body {
     width: 360px;
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
