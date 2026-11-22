@@ -14,11 +14,24 @@
     width: 360px;
     font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
     background: #f4f5f7;
+    /* 主体盒子自身不滚动：锁定弹窗视口上限，头部/footer 固定，内容区内部滚动。
+       内容不足时 body 高度仍由内容决定，不会出现底部空白 */
+    display: flex;
+    flex-direction: column;
+    max-height: 600px;
+    overflow: hidden;
   }
   .header {
+    flex-shrink: 0;
     background: linear-gradient(135deg, #fb7299 0%, #ff9eb5 100%);
     color: #fff;
     padding: 16px;
+  }
+  /* 内容滚动区：输入框/收藏/截止列表/页脚，超出 body 剩余高度时在此滚动 */
+  .scroll-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
   }
   .header h1 { font-size: 16px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
   .header h1 img { width: 28px; height: 28px; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
@@ -68,9 +81,9 @@
     border-color: #fb7299;
   }
 
+  /* 列表不再各自限高：由外层 .scroll-body 统一滚动，避免滚动条嵌套 */
   .activity-list {
-    max-height: 240px;
-    overflow-y: auto;
+    overflow-y: visible;
   }
   .activity-item {
     padding: 10px 0;
@@ -168,30 +181,34 @@
   </div>
 </div>
 
-<div class="section">
-  <div class="input-group">
-    <label>我的视频类型（用于智能匹配）</label>
-    <input type="text" id="videoType" placeholder="如：影视解说、生活vlog、美食制作" />
-  </div>
-  <button class="btn btn-primary" id="openPageBtn">打开B站活动页面 →</button>
-</div>
+<div class="scroll-body">
 
-<div class="section">
-  <div class="section-title">⭐ 我的收藏</div>
-  <div class="activity-list" id="favList">
-    <div class="empty">暂无收藏，在活动页点击卡片右上角 ☆ 即可收藏</div>
+  <div class="section">
+    <div class="input-group">
+      <label>我的视频类型（用于智能匹配）</label>
+      <input type="text" id="videoType" placeholder="如：影视解说、生活vlog、美食制作" />
+    </div>
+    <button class="btn btn-primary" id="openPageBtn">打开B站活动页面 →</button>
   </div>
-</div>
 
-<div class="section">
-  <div class="section-title">⏰ 即将截止的活动</div>
-  <div class="activity-list" id="endingList">
-    <div class="loading"><div class="spinner"></div>加载中...</div>
+  <div class="section">
+    <div class="section-title">⭐ 我的收藏</div>
+    <div class="activity-list" id="favList">
+      <div class="empty">暂无收藏，在活动页点击卡片右上角 ☆ 即可收藏</div>
+    </div>
   </div>
-</div>
 
-<div class="footer">
-  数据来源：B站活动中心 | 点击活动卡片直接投稿
+  <div class="section">
+    <div class="section-title">⏰ 即将截止的活动</div>
+    <div class="activity-list" id="endingList">
+      <div class="loading"><div class="spinner"></div>加载中...</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    数据来源：B站活动中心 | 点击活动卡片直接投稿
+  </div>
+
 </div>
 
 <script src="core.js"></script>
