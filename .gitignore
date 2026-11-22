@@ -4,3 +4,7 @@ node_modules/
 
 # 打包产物
 *.zip
+
+# 私人笔记与推广素材（不入库）
+.workbuddy/
+juejin-article/
