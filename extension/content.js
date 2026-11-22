@@ -20,57 +20,8 @@
     }
   };
 
-  // ========== 工具函数 ==========
-  // HTML 转义：所有来自B站API的字符串插入模板前必须经过此函数
-  function esc(s) {
-    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  }
-
-  function today() {
-    return new Date(); // 每次现取，避免页面跨午夜后剩余天数全错
-  }
-
-  // 防抖：搜索/输入停止 300ms 后才触发重渲染
-  function debounce(fn, delay = 300) {
-    let timer = null;
-    return (...args) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => fn(...args), delay);
-    };
-  }
-
-  function daysLeft(endDate) {
-    const end = new Date(endDate);
-    return Math.ceil((end - today()) / (1000 * 60 * 60 * 24));
-  }
-
-  function formatDate(dateStr) {
-    const d = new Date(dateStr);
-    return `${d.getMonth() + 1}月${d.getDate()}日`;
-  }
-
-  function calcMatch(activity, userInput) {
-    if (!userInput || !userInput.trim()) return null;
-    const input = userInput.toLowerCase().trim();
-    const keywords = input.split(/[\s,，、/]+/).filter(k => k.length >= 1);
-    let score = 0;
-    let maxScore = 0;
-
-    const title = activity.title.toLowerCase();
-    const tags = activity.tags.map(t => t.toLowerCase());
-    const suitable = (activity.suitableFor || []).map(s => s.toLowerCase());
-    const desc = activity.desc.toLowerCase();
-
-    keywords.forEach(kw => {
-      maxScore += 29;
-      if (title.includes(kw)) score += 10;
-      if (tags.some(t => t.includes(kw) || kw.includes(t))) score += 7;
-      if (suitable.some(s => s.includes(kw) || kw.includes(s))) score += 8;
-      if (desc.includes(kw)) score += 4;
-    });
-
-    return maxScore > 0 ? Math.min(100, Math.round((score / maxScore) * 100)) : 0;
-  }
+  // ========== 工具函数（来自 BAFCore 三端共享，见根目录 core.js） ==========
+  const { esc, debounce, daysLeft, formatDate, calcMatch, getMatchLevel, getCategoryIcon, fetchRawActivities, browserFetchOne, transformActivities } = BAFCore;
 
   // ========== 数据加载 ==========
   async function loadData() {
@@ -86,15 +37,15 @@
       const resp = await chrome.runtime.sendMessage({ type: 'FETCH_ACTIVITIES' });
       if (resp.success) {
         activities = resp.data;
+        if (resp.stale) console.warn('[B站活动筛选助手] 使用的是过期缓存数据');
         return true;
       }
       throw new Error(resp.error || '获取失败');
     } catch (err) {
       console.error('[B站活动筛选助手] 数据加载失败:', err);
-      // fallback: 直接在页面上下文调用API
+      // fallback: 直接在页面上下文调用API（core.js 本地转换，与正常路径推断一致）
       try {
-        const data = await fetchInPage();
-        activities = data;
+        activities = await fetchInPage();
         return true;
       } catch (e) {
         console.error('[B站活动筛选助手] fallback也失败:', e);
@@ -103,63 +54,10 @@
     }
   }
 
-  // fallback: 在页面上下文中直接调用B站API
+  // fallback: 在页面上下文中直接调用B站API并用 BAFCore 转换
   async function fetchInPage() {
-    const PAGE_SIZE = 50;
-    const first = await fetch(`https://api.bilibili.com/x/activity_components/video_activity/hot_activity?pn=1&ps=${PAGE_SIZE}&web_location=888.139379`, { credentials: 'include' });
-    const firstJson = await first.json();
-    const total = firstJson.data?.page?.total || 0;
-    const totalPages = Math.ceil(total / PAGE_SIZE);
-    let items = [...(firstJson.data?.list || [])];
-
-    if (totalPages > 1) {
-      const promises = [];
-      for (let pn = 2; pn <= totalPages; pn++) {
-        promises.push(fetch(`https://api.bilibili.com/x/activity_components/video_activity/hot_activity?pn=${pn}&ps=${PAGE_SIZE}&web_location=888.139379`, { credentials: 'include' }).then(r => r.json()));
-      }
-      const pages = await Promise.all(promises);
-      pages.forEach(p => { if (p.data?.list) items = items.concat(p.data.list); });
-    }
-
-    // 抓到原始数据后交给 background 做完整推断转换，保证筛选/匹配与正常路径一致
-    try {
-      const resp = await chrome.runtime.sendMessage({ type: 'TRANSFORM_ACTIVITIES', payload: items });
-      if (resp && resp.success && Array.isArray(resp.data)) return resp.data;
-      throw new Error(resp?.error || '转换失败');
-    } catch (e) {
-      console.warn('[B站活动筛选助手] background转换不可用，使用极简兜底（筛选/匹配功能受限）:', e);
-      return items.map(minimalTransform);
-    }
-  }
-
-  // 极简兜底转换：分类/奖励/匹配推断全部缺失，仅保证列表可展示
-  function minimalTransform(item, i) {
-    const name = item.name || '';
-    return {
-      id: item.id || i + 1,
-      title: name,
-      category: '综合',
-      categories: ['综合'],
-      tags: item.hot_labels || [],
-      startDate: item.stime ? formatTimestamp(item.stime) : '',
-      endDate: item.etime ? formatTimestamp(item.etime) : '',
-      rewardType: '混合',
-      rewardDesc: '详见活动页面',
-      submitZone: '生活区',
-      submitTag: `#${name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '') || '活动'}#`,
-      url: item.act_url || '',
-      cover: item.cover || '',
-      difficulty: '低',
-      competition: '低',
-      suitableFor: [],
-      desc: `${name}活动，${(item.hot_labels || []).join('、')}。详见活动页面。`
-    };
-  }
-
-  // Unix 时间戳 → 本地时区日期（YYYY-MM-DD），与 Web 版/油猴保持一致
-  function formatTimestamp(ts) {
-    const d = new Date(ts * 1000);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const items = await fetchRawActivities(browserFetchOne);
+    return transformActivities(items);
   }
 
   // ========== 筛选逻辑 ==========
@@ -305,26 +203,6 @@
     return null;
   }
 
-  function getCategoryIcon(category, tags) {
-    const tagText = (tags || []).join('').toLowerCase();
-    // 鬼畜/鸡你太美相关活动用特殊标识
-    if (/鬼畜|黄绿合战|音mad|鬼畜调教|鸡你太美|唱跳|rap|篮球/.test(tagText) || category === '鬼畜') {
-      return { icon: '🏀', label: '鸡你太美', bg: '#fff1f0', color: '#f5222d' };
-    }
-    const map = {
-      '游戏': { icon: '🎮', label: '游戏', bg: '#f0f5ff', color: '#2f54eb' },
-      '动画': { icon: '🎬', label: '动画', bg: '#fff0f6', color: '#eb2f96' },
-      '影视': { icon: '🎥', label: '影视', bg: '#fff7e6', color: '#fa8c16' },
-      '音乐': { icon: '🎵', label: '音乐', bg: '#f9f0ff', color: '#722ed1' },
-      '知识': { icon: '📚', label: '知识', bg: '#e6fffb', color: '#13c2c2' },
-      '美食': { icon: '🍜', label: '美食', bg: '#fcffe6', color: '#a0d911' },
-      '亲子': { icon: '👨‍👩‍👧', label: '亲子', bg: '#fcffe6', color: '#a0d911' },
-      '科技': { icon: '💻', label: '科技', bg: '#f0f0f0', color: '#595959' },
-      '综合': { icon: '✨', label: '综合', bg: '#e6f7ff', color: '#1890ff' }
-    };
-    return map[category] || { icon: '📌', label: category, bg: '#f0f0f0', color: '#595959' };
-  }
-
   function renderActivityList() {
     let listContainer = document.getElementById('baf-activity-list');
     if (!listContainer) {
@@ -354,7 +232,7 @@
     listContainer.innerHTML = list.map(a => {
       const days = daysLeft(a.endDate);
       const match = calcMatch(a, settings.videoType);
-      const matchLevel = match === null ? null : match >= 50 ? 'high' : match >= 25 ? 'medium' : 'low';
+      const matchLevel = getMatchLevel(match);
       const isHighMatch = matchLevel === 'high';
       const isEndingSoon = days >= 0 && days <= 7;
       const daysClass = days <= 7 ? 'baf-days-urgent' : days <= 30 ? 'baf-days-normal' : 'baf-days-long';

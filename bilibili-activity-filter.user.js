@@ -2,7 +2,7 @@
 // @name         B站活动筛选助手
 // @name:zh-CN   B站活动筛选助手
 // @namespace    https://github.com/zengCodes/bilibili-activity-filter
-// @version      1.0.4
+// @version      1.1.1
 // @description  实时获取B站173+投稿活动，智能匹配你的视频类型，支持分类/时间/奖励/门槛筛选、匹配度排序、截止提醒
 // @description:zh-CN 实时获取B站173+投稿活动，智能匹配你的视频类型，支持分类/时间/奖励/门槛筛选、匹配度排序、截止提醒
 // @author       zengCodes
@@ -13,6 +13,325 @@
 
 (function () {
   'use strict';
+
+  /**
+ * BAFCore - B站活动筛选工具 三端共享核心逻辑（Web版 / Chrome扩展 / 油猴脚本）
+ *
+ * 单一数据源：本文件是推断、匹配、工具函数的唯一实现，修改后运行 `npm run build`
+ * 同步到 public/、extension/ 并重新生成油猴脚本，避免三端逻辑漂移。
+ *
+ * 三种加载方式：
+ * - Node.js:  const BAFCore = require('./core.js')
+ * - 浏览器:   <script src="core.js"></script> → window.BAFCore
+ * - 油猴:     构建时由 scripts/build.js 内联进 user.js
+ */
+(function (global) {
+  'use strict';
+
+  // ========== 常量 ==========
+  const API_URL = 'https://api.bilibili.com/x/activity_components/video_activity/hot_activity';
+  const PAGE_SIZE = 50;
+  const WEB_LOCATION = '888.139379'; // B站活动中心页面的固定跟踪参数
+
+  // ========== 通用工具 ==========
+  // HTML 转义：所有来自B站API的字符串插入模板前必须经过此函数
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // 每次现取，避免页面跨午夜后剩余天数全错
+  function today() {
+    return new Date();
+  }
+
+  // 防抖：搜索/输入停止 300ms 后才触发重渲染
+  function debounce(fn, delay = 300) {
+    let timer = null;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), delay);
+    };
+  }
+
+  function daysLeft(endDate) {
+    const end = new Date(endDate);
+    return Math.ceil((end - today()) / (1000 * 60 * 60 * 24));
+  }
+
+  // "2026-11-30" → "11月30日"
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return `${d.getMonth() + 1}月${d.getDate()}日`;
+  }
+
+  // "2026-11-30" → "11/30"（扩展 popup 空间紧凑用）
+  function formatDateShort(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
+  // Unix 时间戳 → 本地时区日期（YYYY-MM-DD），与 Web 版/油猴/扩展保持一致
+  function formatTimestamp(ts) {
+    const d = new Date(ts * 1000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // ========== 匹配度 ==========
+  function calcMatch(activity, userInput) {
+    if (!userInput || !userInput.trim()) return null;
+    const input = userInput.toLowerCase().trim();
+    const keywords = input.split(/[\s,，、/]+/).filter(k => k.length >= 1);
+    let score = 0;
+    let maxScore = 0;
+
+    const title = (activity.title || '').toLowerCase();
+    const tags = (activity.tags || []).map(t => t.toLowerCase());
+    const suitable = (activity.suitableFor || []).map(s => s.toLowerCase());
+    const desc = (activity.desc || '').toLowerCase();
+
+    keywords.forEach(kw => {
+      maxScore += 29; // 每个关键词最大可能得分：标题10 + 标签7 + 适合类型8 + 描述4
+      if (title.includes(kw)) score += 10;
+      if (tags.some(t => t.includes(kw) || kw.includes(t))) score += 7;
+      if (suitable.some(s => s.includes(kw) || kw.includes(s))) score += 8;
+      if (desc.includes(kw)) score += 4;
+    });
+
+    return maxScore > 0 ? Math.min(100, Math.round((score / maxScore) * 100)) : 0;
+  }
+
+  // 阈值三端统一：≥50 高 / ≥25 中 / 其余低
+  function getMatchLevel(score) {
+    if (score === null) return null;
+    if (score >= 50) return 'high';
+    if (score >= 25) return 'medium';
+    return 'low';
+  }
+
+  function getMatchText(score) {
+    if (score === null) return '';
+    if (score >= 50) return `⭐ 高度匹配 ${score}%`;
+    if (score >= 25) return `🔹 中度匹配 ${score}%`;
+    return `匹配度 ${score}%`;
+  }
+
+  // ========== 展示辅助 ==========
+  // 分类图标徽章
+  function getCategoryIcon(category, tags) {
+    const tagText = (tags || []).join('').toLowerCase();
+    if (/鬼畜|黄绿合战|音mad|鬼畜调教|鸡你太美|唱跳|rap|篮球/.test(tagText) || category === '鬼畜') {
+      return { icon: '🏀', label: '鸡你太美', bg: '#fff1f0', color: '#f5222d' };
+    }
+    const map = {
+      '游戏': { icon: '🎮', label: '游戏', bg: '#f0f5ff', color: '#2f54eb' },
+      '动画': { icon: '🎬', label: '动画', bg: '#fff0f6', color: '#eb2f96' },
+      '影视': { icon: '🎥', label: '影视', bg: '#fff7e6', color: '#fa8c16' },
+      '音乐': { icon: '🎵', label: '音乐', bg: '#f9f0ff', color: '#722ed1' },
+      '知识': { icon: '📚', label: '知识', bg: '#e6fffb', color: '#13c2c2' },
+      '美食': { icon: '🍜', label: '美食', bg: '#fcffe6', color: '#a0d911' },
+      '亲子': { icon: '👨‍👩‍👧', label: '亲子', bg: '#fcffe6', color: '#a0d911' },
+      '科技': { icon: '💻', label: '科技', bg: '#f0f0f0', color: '#595959' },
+      '综合': { icon: '✨', label: '综合', bg: '#e6f7ff', color: '#1890ff' }
+    };
+    return map[category] || { icon: '📌', label: category, bg: '#f0f0f0', color: '#595959' };
+  }
+
+  // 奖励丰厚程度排序权重
+  function getRewardWeight(activity) {
+    const weights = {
+      '固定奖金': 5,
+      '现金瓜分': 4,
+      '混合': 3,
+      '流量扶持': 2,
+      '游戏道具': 1,
+      '周边抽奖': 1
+    };
+    return weights[activity.rewardType] || 0;
+  }
+
+  // ========== 数据抓取 ==========
+  /**
+   * 分页抓取全部原始活动条目
+   * @param {Function} fetchOne - 单页抓取函数 (pn) => Promise<json>，由各端注入
+   *                              （Node 端可用 nodeFetchOne，浏览器端用带 credentials 的 fetch）
+   */
+  async function fetchRawActivities(fetchOne) {
+    const first = await fetchOne(1);
+    if (first.code !== 0) throw new Error(first.message || 'API错误');
+
+    const total = first.data?.page?.total || 0;
+    const totalPages = Math.ceil(total / PAGE_SIZE);
+    let items = [...(first.data?.list || [])];
+
+    if (totalPages > 1) {
+      const promises = [];
+      for (let pn = 2; pn <= totalPages; pn++) {
+        promises.push(fetchOne(pn));
+      }
+      const pages = await Promise.all(promises);
+      pages.forEach(p => {
+        if (p.code === 0 && p.data?.list) {
+          items = items.concat(p.data.list);
+        }
+      });
+    }
+
+    return items;
+  }
+
+  /**
+   * Node 端单页抓取（带伪装 headers 与 10s 超时），供 server.js / update-data 脚本使用
+   */
+  async function nodeFetchOne(pn) {
+    const url = `${API_URL}?pn=${pn}&ps=${PAGE_SIZE}&web_location=${WEB_LOCATION}`;
+    const resp = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://www.bilibili.com/'
+      },
+      signal: AbortSignal.timeout(10000)
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
+  }
+
+  /**
+   * 浏览器端单页抓取（同源页面/扩展 host 权限，带 cookies）
+   */
+  function browserFetchOne(pn) {
+    const url = `${API_URL}?pn=${pn}&ps=${PAGE_SIZE}&web_location=${WEB_LOCATION}`;
+    return fetch(url, { credentials: 'include' }).then(r => r.json());
+  }
+
+  // ========== 数据转换与推断 ==========
+  function transformActivities(items) {
+    return items.map((item, index) => transformActivity(item, index));
+  }
+
+  function transformActivity(item, index) {
+    const labels = item.hot_labels || [];
+    const name = item.name || '';
+    const text = (labels.join('') + name).toLowerCase();
+
+    const categories = inferCategories(text);
+    const primaryCategory = categories[0];
+
+    return {
+      id: item.id || index + 1,
+      title: name,
+      category: primaryCategory,        // 主分类（用于卡片显示）
+      categories: categories,           // 所有分类（用于多分类筛选）
+      tags: labels,
+      startDate: item.stime ? formatTimestamp(item.stime) : '',
+      endDate: item.etime ? formatTimestamp(item.etime) : '',
+      rewardType: inferRewardType(text),
+      rewardDesc: labels.filter(l => /奖金|瓜分|奖励|激励|扶持|周边|抽奖|材料|道具/.test(l)).join('、') || '详见活动页面',
+      submitZone: inferSubmitZone(primaryCategory),
+      submitTag: `#${name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '') || '活动'}#`,
+      url: item.act_url || '',
+      cover: item.cover || '',
+      difficulty: inferDifficulty(text, primaryCategory),
+      competition: inferCompetition(primaryCategory, labels),
+      suitableFor: inferSuitableFor(text, primaryCategory),
+      desc: `${name}活动，${labels.join('、')}。详见活动页面。`,
+      // 原始时间戳（备用）
+      _stime: item.stime,
+      _etime: item.etime
+    };
+  }
+
+  /**
+   * 从标签和名称推断活动分类（支持多分类）
+   * 返回数组，第一个元素为主分类
+   */
+  function inferCategories(text) {
+    const cats = [];
+    if (/游戏|手游|端游|攻略|FPS|射击|MOBA|原神|崩坏|星穹|鸣潮|永劫|阴阳师|蛋仔|暗区|三角洲|火影|逆水寒|异环|重返未来|游戏王|P5X|物华弥新|遗忘之海|蔚蓝档案|无限暖暖|APEX|LOL|光遇|战双|绝区零|明日方舟|第五人格|和平精英|王者荣耀|无畏契约|瓦罗兰特/.test(text)) cats.push('游戏');
+    if (/动画|番剧|国创|动漫|鬼畜|黄绿合战|同人|Bonly|cosplay|绘画|手书|up动画|动画剧场|手搓动画|3d动画|MAD|AMV|EVA|RE0|re0|凡人修仙|雪王动画|动漫二创|二创/.test(text)) cats.push('动画');
+    if (/影视|电影|电视剧|漫威|复联|解说|盘点|短片|AI影视|影视解说/.test(text)) cats.push('影视');
+    if (/音乐|MV|原创音乐|唱歌|编曲|Vsinger|洛天依|宅舞|舞蹈|直拍|饭拍|演唱会|live现场|音乐现场|音乐MV|音mad|鬼畜调教/.test(text)) cats.push('音乐');
+    if (/知识|科普|科学|历史|人文|诺贝尔|长视频/.test(text)) cats.push('知识');
+    if (/美食|料理|做饭|烘焙|探店/.test(text)) cats.push('美食');
+    if (/亲子|家庭|育儿|宝宝/.test(text)) cats.push('亲子');
+    if (/科技|数码|测评|汽车|方程豹|海尔|品牌合作/.test(text)) cats.push('科技');
+    if (/vlog|生活|日常|旅行|跨文化|外国人|播客|单口|开麦|手工|DIY|赛车|体育|赛事|直播|切片|主播|二次元/.test(text)) cats.push('综合');
+    if (cats.length === 0) cats.push('综合');
+    return cats;
+  }
+
+  function inferRewardType(text) {
+    if (/瓜分/.test(text)) return '现金瓜分';
+    if (/奖金|奖金池|万奖金/.test(text)) return '固定奖金';
+    if (/流量扶持|流量激励|曝光/.test(text)) return '流量扶持';
+    if (/道具|材料|战力|星声|游戏内/.test(text)) return '游戏道具';
+    if (/周边|抽奖|贝壳金/.test(text)) return '周边抽奖';
+    return '混合';
+  }
+
+  function inferDifficulty(text, category) {
+    if (/宅舞|舞蹈|cosplay|绘画|手书|同人|调教|编曲|原创音乐|鬼畜|调音/.test(text)) return '高';
+    if (/品牌合作|海尔|方程豹|高能净界/.test(text)) return '高';
+    if (category === '游戏') return '中';
+    if (/征稿|有奖|激励|瓜分|扶持/.test(text)) return '低';
+    return '低';
+  }
+
+  function inferCompetition(category, labels) {
+    if (category === '游戏' && /原神|崩坏|星穹|鸣潮|永劫|蛋仔/.test(labels.join(''))) return '高';
+    if (category === '游戏') return '中';
+    if (category === '综合') return '中';
+    return '低';
+  }
+
+  function inferSubmitZone(category) {
+    const map = {
+      '游戏': '游戏区', '影视': '影视区', '音乐': '音乐区', '知识': '知识区',
+      '动画': '动画区', '美食': '美食区', '亲子': '生活区', '科技': '科技区',
+      '综合': '生活区/综合', '鬼畜': '鬼畜区'
+    };
+    return map[category] || '生活区';
+  }
+
+  function inferSuitableFor(text, category) {
+    const result = [];
+    if (/解说|吐槽|盘点|混剪|剪辑/.test(text)) result.push('解说', '剪辑', '混剪', '盘点');
+    if (/攻略/.test(text)) result.push('攻略');
+    if (/vlog|日常|生活|旅行/.test(text)) result.push('vlog', '生活', '日常', '旅行');
+    if (/美食|料理|做饭|烘焙|探店/.test(text)) result.push('美食', '做饭', '探店');
+    if (/音乐|MV|唱歌|原创/.test(text)) result.push('音乐', '唱歌', 'MV');
+    if (/舞蹈|宅舞|直拍|饭拍/.test(text)) result.push('舞蹈', '直拍');
+    if (/科普|知识|科学|历史|人文|诺贝尔/.test(text)) result.push('科普', '知识', '历史');
+    if (/手工|DIY|折纸|粘土/.test(text)) result.push('手工', 'DIY', '教程');
+    if (/播客|单口|开麦|聊天/.test(text)) result.push('播客', '单口', '聊天', '分享');
+    if (/cosplay|绘画|同人|手书/.test(text)) result.push('cosplay', '绘画', '同人');
+    if (/鬼畜|调音/.test(text)) result.push('鬼畜', '调音');
+    if (/赛车|体育|赛事/.test(text)) result.push('赛车', '体育', '赛事');
+    if (/亲子|家庭|育儿/.test(text)) result.push('亲子', '家庭', '育儿');
+    if (/影视|电影|电视剧|漫威/.test(text)) result.push('影视', '电影', '电视剧');
+    if (category === '游戏') result.push('游戏', '解说');
+    if (/二创|同人/.test(text)) result.push('二创');
+    return [...new Set(result)];
+  }
+
+  // ========== 导出 ==========
+  const BAFCore = {
+    API_URL, PAGE_SIZE, WEB_LOCATION,
+    esc, today, debounce, daysLeft, formatDate, formatDateShort, formatTimestamp,
+    calcMatch, getMatchLevel, getMatchText,
+    getCategoryIcon, getRewardWeight,
+    fetchRawActivities, nodeFetchOne, browserFetchOne,
+    transformActivities, transformActivity,
+    inferCategories, inferRewardType, inferDifficulty, inferCompetition, inferSubmitZone, inferSuitableFor
+  };
+
+  global.BAFCore = BAFCore;
+  if (typeof module !== 'undefined' && module.exports) {
+    module.exports = BAFCore;
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+
 
   // ========== 注入样式 ==========
   const style = document.createElement('style');
@@ -99,63 +418,8 @@
 
   const STORAGE_KEY = 'baf_settings';
 
-  // ========== 工具函数 ==========
-  // HTML 转义：所有来自B站API的字符串插入模板前必须经过此函数
-  function esc(s) {
-    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  }
-
-  function today() {
-    return new Date(); // 每次现取，避免页面跨午夜后剩余天数全错
-  }
-
-  // 防抖：搜索/输入停止 300ms 后才触发重渲染
-  function debounce(fn, delay = 300) {
-    let timer = null;
-    return (...args) => {
-      clearTimeout(timer);
-      timer = setTimeout(() => fn(...args), delay);
-    };
-  }
-
-  function daysLeft(endDate) {
-    const end = new Date(endDate);
-    return Math.ceil((end - today()) / (1000 * 60 * 60 * 24));
-  }
-
-  function formatDate(dateStr) {
-    const d = new Date(dateStr);
-    return `${d.getMonth() + 1}月${d.getDate()}日`;
-  }
-
-  // Unix 时间戳 → 本地时区日期（YYYY-MM-DD），与 Web 版/扩展保持一致
-  function formatTimestamp(ts) {
-    const d = new Date(ts * 1000);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
-
-  function calcMatch(activity, userInput) {
-    if (!userInput || !userInput.trim()) return null;
-    const input = userInput.toLowerCase().trim();
-    const keywords = input.split(/[\s,，、/]+/).filter(k => k.length >= 1);
-    let score = 0;
-    let maxScore = 0;
-
-    const title = (activity.title || '').toLowerCase();
-    const tags = (activity.tags || []).map(t => t.toLowerCase());
-    const suitable = (activity.suitableFor || []).map(s => s.toLowerCase());
-    const desc = (activity.desc || '').toLowerCase();
-
-    keywords.forEach(kw => {
-      maxScore += 29;
-      if (title.includes(kw)) score += 10;
-      if (tags.some(t => t.includes(kw) || kw.includes(t))) score += 7;
-      if (suitable.some(s => s.includes(kw) || kw.includes(s))) score += 8;
-      if (desc.includes(kw)) score += 4;
-    });
-
-    return maxScore > 0 ? Math.min(100, Math.round((score / maxScore) * 100)) : 0;
-  }
+  // ========== 工具函数（来自 BAFCore 三端共享，见根目录 core.js） ==========
+  const { esc, debounce, daysLeft, formatDate, calcMatch, getMatchLevel, getMatchText, getCategoryIcon, fetchRawActivities, browserFetchOne, transformActivities } = BAFCore;
 
   function loadSettings() {
     try {
@@ -176,121 +440,10 @@
 
   // ========== 数据加载 ==========
   async function fetchActivities() {
-    const PAGE_SIZE = 50;
-    const API_URL = 'https://api.bilibili.com/x/activity_components/video_activity/hot_activity';
-
-    const first = await fetch(`${API_URL}?pn=1&ps=${PAGE_SIZE}&web_location=888.139379`, { credentials: 'include' });
-    const firstJson = await first.json();
-    const total = firstJson.data?.page?.total || 0;
-    const totalPages = Math.ceil(total / PAGE_SIZE);
-    let items = [...(firstJson.data?.list || [])];
-
-    if (totalPages > 1) {
-      const promises = [];
-      for (let pn = 2; pn <= totalPages; pn++) {
-        promises.push(fetch(`${API_URL}?pn=${pn}&ps=${PAGE_SIZE}&web_location=888.139379`, { credentials: 'include' }).then(r => r.json()));
-      }
-      const pages = await Promise.all(promises);
-      pages.forEach(p => { if (p.data?.list) items = items.concat(p.data.list); });
-    }
-
-    return items.map((item, i) => transformActivity(item, i));
+    const items = await fetchRawActivities(browserFetchOne);
+    return transformActivities(items);
   }
 
-  // ========== 数据转换与推断（与 Web 版 server.js 保持一致） ==========
-  function transformActivity(item, index) {
-    const labels = item.hot_labels || [];
-    const name = item.name || '';
-    const text = (labels.join('') + name).toLowerCase();
-
-    const categories = inferCategories(text);
-    const primaryCategory = categories[0];
-
-    return {
-      id: item.id || index + 1,
-      title: name,
-      category: primaryCategory,
-      categories: categories,
-      tags: labels,
-      startDate: item.stime ? formatTimestamp(item.stime) : '',
-      endDate: item.etime ? formatTimestamp(item.etime) : '',
-      rewardType: inferRewardType(text),
-      rewardDesc: labels.filter(l => /奖金|瓜分|奖励|激励|扶持|周边|抽奖|材料|道具/.test(l)).join('、') || '详见活动页面',
-      submitZone: inferSubmitZone(primaryCategory),
-      submitTag: `#${name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '') || '活动'}#`,
-      url: item.act_url || '',
-      cover: item.cover || '',
-      difficulty: inferDifficulty(text, primaryCategory),
-      competition: inferCompetition(primaryCategory, labels),
-      suitableFor: inferSuitableFor(text, primaryCategory),
-      desc: `${name}活动，${labels.join('、')}。详见活动页面。`
-    };
-  }
-
-  function inferCategories(text) {
-    const cats = [];
-    if (/游戏|手游|端游|攻略|FPS|射击|MOBA|原神|崩坏|星穹|鸣潮|永劫|阴阳师|蛋仔|暗区|三角洲|火影|逆水寒|异环|重返未来|游戏王|P5X|物华弥新|遗忘之海|蔚蓝档案|无限暖暖|APEX|LOL|光遇|战双|绝区零|明日方舟|第五人格|和平精英|王者荣耀|无畏契约|瓦罗兰特/.test(text)) cats.push('游戏');
-    if (/动画|番剧|国创|动漫|鬼畜|黄绿合战|同人|Bonly|cosplay|绘画|手书|up动画|动画剧场|手搓动画|3d动画|MAD|AMV|EVA|RE0|re0|凡人修仙|雪王动画|动漫二创|二创/.test(text)) cats.push('动画');
-    if (/影视|电影|电视剧|漫威|复联|解说|盘点|短片|AI影视|影视解说/.test(text)) cats.push('影视');
-    if (/音乐|MV|原创音乐|唱歌|编曲|Vsinger|洛天依|宅舞|舞蹈|直拍|饭拍|演唱会|live现场|音乐现场|音乐MV|音mad|鬼畜调教/.test(text)) cats.push('音乐');
-    if (/知识|科普|科学|历史|人文|诺贝尔|长视频/.test(text)) cats.push('知识');
-    if (/美食|料理|做饭|烘焙|探店/.test(text)) cats.push('美食');
-    if (/亲子|家庭|育儿|宝宝/.test(text)) cats.push('亲子');
-    if (/科技|数码|测评|汽车|方程豹|海尔|品牌合作/.test(text)) cats.push('科技');
-    if (/vlog|生活|日常|旅行|跨文化|外国人|播客|单口|开麦|手工|DIY|赛车|体育|赛事|直播|切片|主播|二次元/.test(text)) cats.push('综合');
-    if (cats.length === 0) cats.push('综合');
-    return cats;
-  }
-
-  function inferRewardType(text) {
-    if (/瓜分/.test(text)) return '现金瓜分';
-    if (/奖金|奖金池|万奖金/.test(text)) return '固定奖金';
-    if (/流量扶持|流量激励|曝光/.test(text)) return '流量扶持';
-    if (/道具|材料|战力|星声|游戏内/.test(text)) return '游戏道具';
-    if (/周边|抽奖|贝壳金/.test(text)) return '周边抽奖';
-    return '混合';
-  }
-
-  function inferDifficulty(text, category) {
-    if (/宅舞|舞蹈|cosplay|绘画|手书|同人|调教|编曲|原创音乐|鬼畜|调音/.test(text)) return '高';
-    if (/品牌合作|海尔|方程豹|高能净界/.test(text)) return '高';
-    if (category === '游戏') return '中';
-    if (/征稿|有奖|激励|瓜分|扶持/.test(text)) return '低';
-    return '低';
-  }
-
-  function inferCompetition(category, labels) {
-    if (category === '游戏' && /原神|崩坏|星穹|鸣潮|永劫|蛋仔/.test(labels.join(''))) return '高';
-    if (category === '游戏') return '中';
-    if (category === '综合') return '中';
-    return '低';
-  }
-
-  function inferSubmitZone(category) {
-    const map = { '游戏': '游戏区', '影视': '影视区', '音乐': '音乐区', '知识': '知识区', '动画': '动画区', '美食': '美食区', '亲子': '生活区', '科技': '科技区', '综合': '生活区/综合', '鬼畜': '鬼畜区' };
-    return map[category] || '生活区';
-  }
-
-  function inferSuitableFor(text, category) {
-    const result = [];
-    if (/解说|吐槽|盘点|混剪|剪辑/.test(text)) result.push('解说', '剪辑', '混剪', '盘点');
-    if (/攻略/.test(text)) result.push('攻略');
-    if (/vlog|日常|生活|旅行/.test(text)) result.push('vlog', '生活', '日常', '旅行');
-    if (/美食|料理|做饭|烘焙|探店/.test(text)) result.push('美食', '做饭', '探店');
-    if (/音乐|MV|唱歌|原创/.test(text)) result.push('音乐', '唱歌', 'MV');
-    if (/舞蹈|宅舞|直拍|饭拍/.test(text)) result.push('舞蹈', '直拍');
-    if (/科普|知识|科学|历史|人文|诺贝尔/.test(text)) result.push('科普', '知识', '历史');
-    if (/手工|DIY|折纸|粘土/.test(text)) result.push('手工', 'DIY', '教程');
-    if (/播客|单口|开麦|聊天/.test(text)) result.push('播客', '单口', '聊天', '分享');
-    if (/cosplay|绘画|同人|手书/.test(text)) result.push('cosplay', '绘画', '同人');
-    if (/鬼畜|调音/.test(text)) result.push('鬼畜', '调音');
-    if (/赛车|体育|赛事/.test(text)) result.push('赛车', '体育', '赛事');
-    if (/亲子|家庭|育儿/.test(text)) result.push('亲子', '家庭', '育儿');
-    if (/影视|电影|电视剧|漫威/.test(text)) result.push('影视', '电影', '电视剧');
-    if (category === '游戏') result.push('游戏', '解说');
-    if (/二创|同人/.test(text)) result.push('二创');
-    return [...new Set(result)];
-  }
 
   // ========== 筛选逻辑 ==========
   function filterActivities() {
@@ -353,26 +506,6 @@
       if (el) return el;
     }
     return null;
-  }
-
-  function getCategoryIcon(category, tags) {
-    const tagText = (tags || []).join('').toLowerCase();
-    if (/鬼畜|黄绿合战|音mad|鬼畜调教|鸡你太美|唱跳|rap|篮球/.test(tagText) || category === '鬼畜') {
-      return { icon: '🏀', label: '鸡你太美', bg: '#fff1f0', color: '#f5222d' };
-    }
-    const map = {
-      '游戏': { icon: '🎮', label: '游戏', bg: '#f0f5ff', color: '#2f54eb' },
-      '动画': { icon: '🎬', label: '动画', bg: '#fff0f6', color: '#eb2f96' },
-      '影视': { icon: '🎥', label: '影视', bg: '#fff7e6', color: '#fa8c16' },
-      '音乐': { icon: '🎵', label: '音乐', bg: '#f9f0ff', color: '#722ed1' },
-      '知识': { icon: '📚', label: '知识', bg: '#e6fffb', color: '#13c2c2' },
-      '美食': { icon: '🍜', label: '美食', bg: '#fcffe6', color: '#a0d911' },
-      '亲子': { icon: '👨‍👩‍👧', label: '亲子', bg: '#fcffe6', color: '#a0d911' },
-      '科技': { icon: '💻', label: '科技', bg: '#f0f0f0', color: '#595959' },
-      '生活': { icon: '🌟', label: '生活', bg: '#f6ffed', color: '#52c41a' },
-      '综合': { icon: '✨', label: '综合', bg: '#e6f7ff', color: '#1890ff' }
-    };
-    return map[category] || { icon: '📌', label: category, bg: '#f0f0f0', color: '#595959' };
   }
 
   function renderToolbar() {
@@ -473,7 +606,7 @@
     listContainer.innerHTML = list.map(a => {
       const days = daysLeft(a.endDate);
       const match = calcMatch(a, settings.videoType);
-      const matchLevel = match === null ? null : match >= 50 ? 'high' : match >= 25 ? 'medium' : 'low';
+      const matchLevel = getMatchLevel(match);
       const isHighMatch = matchLevel === 'high';
       const daysClass = days <= 7 ? 'baf-days-urgent' : days <= 30 ? 'baf-days-normal' : 'baf-days-long';
       const daysText = days < 0 ? '已结束' : days === 0 ? '今天截止' : `剩余${days}天`;

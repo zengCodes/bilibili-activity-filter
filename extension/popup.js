@@ -1,36 +1,11 @@
 /**
  * B站活动筛选助手 - Popup弹窗逻辑
+ * 工具函数与匹配算法来自 BAFCore（core.js 三端共享）
  */
 
 let activities = [];
 
-// HTML 转义：所有来自B站API的字符串插入模板前必须经过此函数
-function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-function today() {
-  return new Date(); // 每次现取，避免弹窗跨午夜后剩余天数全错
-}
-
-// 防抖：输入停止 300ms 后才触发重渲染
-function debounce(fn, delay = 300) {
-  let timer = null;
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
-}
-
-function daysLeft(endDate) {
-  const end = new Date(endDate);
-  return Math.ceil((end - today()) / (1000 * 60 * 60 * 24));
-}
-
-function formatDate(dateStr) {
-  const d = new Date(dateStr);
-  return `${d.getMonth() + 1}/${d.getDate()}`;
-}
+const { esc, debounce, daysLeft, formatDateShort, calcMatch, getMatchLevel } = BAFCore;
 
 // 加载设置
 async function loadSettings() {
@@ -71,29 +46,6 @@ function updateStats() {
   }).length;
 }
 
-function calcMatch(activity, userInput) {
-  if (!userInput || !userInput.trim()) return null;
-  const input = userInput.toLowerCase().trim();
-  const keywords = input.split(/[\s,，、/]+/).filter(k => k.length >= 1);
-  let score = 0;
-  let maxScore = 0;
-
-  const title = (activity.title || '').toLowerCase();
-  const tags = (activity.tags || []).map(t => t.toLowerCase());
-  const suitable = (activity.suitableFor || []).map(s => s.toLowerCase());
-  const desc = (activity.desc || '').toLowerCase();
-
-  keywords.forEach(kw => {
-    maxScore += 29;
-    if (title.includes(kw)) score += 10;
-    if (tags.some(t => t.includes(kw) || kw.includes(t))) score += 7;
-    if (suitable.some(s => s.includes(kw) || kw.includes(s))) score += 8;
-    if (desc.includes(kw)) score += 4;
-  });
-
-  return maxScore > 0 ? Math.min(100, Math.round((score / maxScore) * 100)) : 0;
-}
-
 function renderEndingList() {
   const videoType = document.getElementById('videoType').value;
   const hasVideoType = videoType && videoType.trim();
@@ -129,7 +81,7 @@ function renderEndingList() {
     const daysClass = days <= 3 ? 'days-urgent' : days <= 7 ? 'days-normal' : 'days-long';
     const daysText = days === 0 ? '今天截止' : `剩余${days}天`;
     const matchBadge = a.match !== null
-      ? `<span class="match-badge ${a.match >= 50 ? 'match-high' : a.match >= 25 ? 'match-mid' : 'match-low'}">匹配${a.match}%</span>`
+      ? `<span class="match-badge ${getMatchLevel(a.match) === 'high' ? 'match-high' : getMatchLevel(a.match) === 'medium' ? 'match-mid' : 'match-low'}">匹配${a.match}%</span>`
       : '';
 
     return `

@@ -46,17 +46,36 @@ npm start
 
 ```
 bilibili-activity-filter/
+├── core.js                            # ★ 三端共享核心逻辑（抓取/推断/匹配/工具函数，单一数据源）
+├── user.src.js                        # 油猴脚本源文件（含 __BAF_CORE__ 占位符）
 ├── public/                            # Web版前端（仅此目录对外静态暴露）
 │   ├── index.html                     # 前端页面（包含CSS和JS）
-│   ├── data.js                        # 离线fallback数据（后端未启动时使用）
+│   ├── core.js                        # 构建产物（npm run build 从根目录复制）
+│   ├── data.js                        # 离线fallback数据（npm run update-data 自动生成）
 │   ├── logo.png / store-logo-300.png  # 图标资源
 ├── extension/                         # Chrome扩展（MV3）
+│   ├── core.js                        # 构建产物（npm run build 从根目录复制）
 │   ├── manifest.json / background.js / content.js / content.css / popup.html / popup.js
-├── bilibili-activity-filter.user.js   # 油猴脚本
+├── scripts/                           # 构建与数据脚本
+│   ├── build.js                       # 同步 core.js 到三端 + 内联生成油猴脚本
+│   └── update-data.js                 # 抓取B站最新活动 → 生成 public/data.js
+├── bilibili-activity-filter.user.js   # 油猴脚本（构建产物，勿直接编辑）
 ├── server.js                          # Node.js后端代理服务
 ├── package.json                       # 依赖配置
 └── README.md                          # 说明文档
 ```
+
+## 开发说明
+
+三端（Web版 / Chrome扩展 / 油猴脚本）共享同一份核心逻辑 `core.js`，避免复制粘贴导致行为漂移：
+
+```bash
+npm run build        # 修改 core.js 或 user.src.js 后运行：同步到 public/、extension/ 并生成油猴脚本
+npm run update-data  # 抓取B站最新活动，更新离线fallback数据（发布/提交前运行）
+npm start            # 启动服务（prestart 自动先 build）
+```
+
+修改代码顺序：根目录 `core.js` / `user.src.js` / `server.js` / `public/index.html` / `extension/*` 都是源文件；`public/core.js`、`extension/core.js`、`bilibili-activity-filter.user.js`、`public/data.js` 是构建产物，不要直接编辑。
 
 ## 后端API
 

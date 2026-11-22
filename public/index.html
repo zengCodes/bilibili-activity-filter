@@ -611,6 +611,7 @@
   <p>数据来源：<a href="https://www.bilibili.com/blackboard/era/reward-activity-list-page.html#/list" target="_blank">B站有奖活动中心</a> | 实时获取，启动 server.js 后自动同步最新活动</p>
 </div>
 
+<script src="core.js"></script>
 <script src="data.js"></script>
 <script>
 // ========== 状态管理 ==========
@@ -626,110 +627,8 @@ const state = {
 
 let ACTIVITIES = []; // 运行时数据，从API或本地fallback加载
 
-// ========== 工具函数 ==========
-// HTML 转义：所有来自B站API的字符串插入模板前必须经过此函数
-function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-function today() {
-  return new Date(); // 每次现取，避免页面跨午夜后剩余天数全错
-}
-
-// 防抖：搜索/输入停止 300ms 后才触发重渲染，避免每敲一个字全量重算
-function debounce(fn, delay = 300) {
-  let timer = null;
-  return (...args) => {
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), delay);
-  };
-}
-
-function daysLeft(endDate) {
-  const end = new Date(endDate);
-  const diff = Math.ceil((end - today()) / (1000 * 60 * 60 * 24));
-  return diff;
-}
-
-function formatDate(dateStr) {
-  const d = new Date(dateStr);
-  return `${d.getMonth()+1}月${d.getDate()}日`;
-}
-
-// 计算匹配度
-function calcMatch(activity, userInput) {
-  if (!userInput || !userInput.trim()) return null;
-  const input = userInput.toLowerCase().trim();
-  const keywords = input.split(/[\s,，、/]+/).filter(k => k.length >= 1);
-  let score = 0;
-  let maxScore = 0;
-
-  // 匹配标题
-  const title = activity.title.toLowerCase();
-  // 匹配标签
-  const tags = activity.tags.map(t => t.toLowerCase());
-  // 匹配适合类型
-  const suitable = activity.suitableFor.map(s => s.toLowerCase());
-  // 匹配描述
-  const desc = activity.desc.toLowerCase();
-
-  keywords.forEach(kw => {
-    maxScore += 29; // 每个关键词最大可能得分：标题10 + 标签7 + 适合类型8 + 描述4
-    if (title.includes(kw)) score += 10;
-    if (tags.some(t => t.includes(kw) || kw.includes(t))) score += 7;
-    if (suitable.some(s => s.includes(kw) || kw.includes(s))) score += 8;
-    if (desc.includes(kw)) score += 4;
-  });
-
-  return maxScore > 0 ? Math.min(100, Math.round((score / maxScore) * 100)) : 0;
-}
-
-function getMatchLevel(score) {
-  if (score === null) return null;
-  if (score >= 50) return 'high';
-  if (score >= 25) return 'medium';
-  return 'low';
-}
-
-function getMatchText(score) {
-  if (score === null) return '';
-  if (score >= 50) return `⭐ 高度匹配 ${score}%`;
-  if (score >= 25) return `🔹 中度匹配 ${score}%`;
-  return `匹配度 ${score}%`;
-}
-
-// 分类图标徽章
-function getCategoryIcon(category, tags) {
-  const tagText = (tags || []).join('').toLowerCase();
-  if (/鬼畜|黄绿合战|音mad|鬼畜调教|鸡你太美|唱跳|rap|篮球/.test(tagText) || category === '鬼畜') {
-    return { icon: '🏀', label: '鸡你太美', bg: '#fff1f0', color: '#f5222d' };
-  }
-  const map = {
-    '游戏': { icon: '🎮', label: '游戏', bg: '#f0f5ff', color: '#2f54eb' },
-    '动画': { icon: '🎬', label: '动画', bg: '#fff0f6', color: '#eb2f96' },
-    '影视': { icon: '🎥', label: '影视', bg: '#fff7e6', color: '#fa8c16' },
-    '音乐': { icon: '🎵', label: '音乐', bg: '#f9f0ff', color: '#722ed1' },
-    '知识': { icon: '📚', label: '知识', bg: '#e6fffb', color: '#13c2c2' },
-    '美食': { icon: '🍜', label: '美食', bg: '#fcffe6', color: '#a0d911' },
-    '亲子': { icon: '👨‍👩‍👧', label: '亲子', bg: '#fcffe6', color: '#a0d911' },
-    '科技': { icon: '💻', label: '科技', bg: '#f0f0f0', color: '#595959' },
-    '综合': { icon: '✨', label: '综合', bg: '#e6f7ff', color: '#1890ff' }
-  };
-  return map[category] || { icon: '📌', label: category, bg: '#f0f0f0', color: '#595959' };
-}
-
-// 奖励丰厚程度排序权重
-function getRewardWeight(activity) {
-  const weights = {
-    '固定奖金': 5,
-    '现金瓜分': 4,
-    '混合': 3,
-    '流量扶持': 2,
-    '游戏道具': 1,
-    '周边抽奖': 1
-  };
-  return weights[activity.rewardType] || 0;
-}
+// ========== 工具函数（来自 BAFCore 三端共享，见根目录 core.js） ==========
+const { esc, debounce, daysLeft, formatDate, calcMatch, getMatchLevel, getMatchText, getCategoryIcon, getRewardWeight } = BAFCore;
 
 // ========== 筛选逻辑 ==========
 function filterActivities() {

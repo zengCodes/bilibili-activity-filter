@@ -15,7 +15,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.bilibili.com/blackboard/era/reward-activity-list-page.html*"],
-      "js": ["content.js"],
+      "js": ["core.js", "content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
