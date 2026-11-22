@@ -30,7 +30,7 @@ npm start
 
 ### 方式二：纯前端（离线数据）
 
-直接用浏览器打开 `index.html`，使用本地缓存的40个活动数据。
+直接用浏览器打开 `public/index.html`，使用本地缓存的40个活动数据。
 
 ## 使用方法
 
@@ -46,11 +46,16 @@ npm start
 
 ```
 bilibili-activity-filter/
-├── index.html    # 前端页面（包含CSS和JS）
-├── server.js     # Node.js后端代理服务
-├── data.js       # 离线fallback数据（后端未启动时使用）
-├── package.json  # 依赖配置
-└── README.md     # 说明文档
+├── public/                            # Web版前端（仅此目录对外静态暴露）
+│   ├── index.html                     # 前端页面（包含CSS和JS）
+│   ├── data.js                        # 离线fallback数据（后端未启动时使用）
+│   ├── logo.png / store-logo-300.png  # 图标资源
+├── extension/                         # Chrome扩展（MV3）
+│   ├── manifest.json / background.js / content.js / content.css / popup.html / popup.js
+├── bilibili-activity-filter.user.js   # 油猴脚本
+├── server.js                          # Node.js后端代理服务
+├── package.json                       # 依赖配置
+└── README.md                          # 说明文档
 ```
 
 ## 后端API

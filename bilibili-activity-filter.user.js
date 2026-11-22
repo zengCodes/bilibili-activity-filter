@@ -2,7 +2,7 @@
 // @name         B站活动筛选助手
 // @name:zh-CN   B站活动筛选助手
 // @namespace    https://github.com/zengCodes/bilibili-activity-filter
-// @version      1.0.3
+// @version      1.0.4
 // @description  实时获取B站173+投稿活动，智能匹配你的视频类型，支持分类/时间/奖励/门槛筛选、匹配度排序、截止提醒
 // @description:zh-CN 实时获取B站173+投稿活动，智能匹配你的视频类型，支持分类/时间/奖励/门槛筛选、匹配度排序、截止提醒
 // @author       zengCodes
@@ -76,6 +76,8 @@
     .baf-days-long { color: #1890ff; }
     .baf-badge { padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; color: #fff; }
     .baf-badge-match { background: #52c41a; }
+    .baf-badge-mid { background: #1890ff; }
+    .baf-badge-low { background: #9499a0; }
     .baf-high-match { border: 2px solid #52c41a !important; background: linear-gradient(135deg, #f6ffed 0%, #fff 60%) !important; }
     .baf-empty { text-align: center; padding: 60px 20px; color: #9499a0; grid-column: 1 / -1; }
   `;
@@ -95,18 +97,41 @@
     }
   };
 
-  const TODAY = new Date();
   const STORAGE_KEY = 'baf_settings';
 
   // ========== 工具函数 ==========
+  // HTML 转义：所有来自B站API的字符串插入模板前必须经过此函数
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function today() {
+    return new Date(); // 每次现取，避免页面跨午夜后剩余天数全错
+  }
+
+  // 防抖：搜索/输入停止 300ms 后才触发重渲染
+  function debounce(fn, delay = 300) {
+    let timer = null;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), delay);
+    };
+  }
+
   function daysLeft(endDate) {
     const end = new Date(endDate);
-    return Math.ceil((end - TODAY) / (1000 * 60 * 60 * 24));
+    return Math.ceil((end - today()) / (1000 * 60 * 60 * 24));
   }
 
   function formatDate(dateStr) {
     const d = new Date(dateStr);
     return `${d.getMonth() + 1}月${d.getDate()}日`;
+  }
+
+  // Unix 时间戳 → 本地时区日期（YYYY-MM-DD），与 Web 版/扩展保持一致
+  function formatTimestamp(ts) {
+    const d = new Date(ts * 1000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
   function calcMatch(activity, userInput) {
@@ -169,56 +194,102 @@
       pages.forEach(p => { if (p.data?.list) items = items.concat(p.data.list); });
     }
 
-    return items.map((item, i) => {
-      const tags = item.hot_labels || [];
-      const tagText = tags.join('').toLowerCase();
-      const name = item.name || '';
+    return items.map((item, i) => transformActivity(item, i));
+  }
 
-      // 推断分类
-      let categories = ['综合'];
-      if (/游戏|手游|网游|电竞|steam|主机游戏/.test(tagText + name)) categories.push('游戏');
-      if (/动画|动漫|国创|番剧|二次元|鬼畜|音mad|黄绿合战/.test(tagText + name)) categories.push('动画');
-      if (/影视|电影|电视剧|综艺|纪录片|剪辑|解说|混剪/.test(tagText + name)) categories.push('影视');
-      if (/音乐|翻唱|原创|演奏|声乐|说唱|rap|唱跳/.test(tagText + name)) categories.push('音乐');
-      if (/知识|科普|科技|数码|编程|人工智能|AI|学习|教育|读书/.test(tagText + name)) categories.push('知识');
-      if (/美食|吃播|探店|做饭|烹饪|零食/.test(tagText + name)) categories.push('美食');
-      if (/亲子|萌娃|育儿|家庭/.test(tagText + name)) categories.push('亲子');
-      if (/生活|vlog|日常|旅行|时尚|美妆|健身|动物|宠物/.test(tagText + name)) categories.push('生活');
+  // ========== 数据转换与推断（与 Web 版 server.js 保持一致） ==========
+  function transformActivity(item, index) {
+    const labels = item.hot_labels || [];
+    const name = item.name || '';
+    const text = (labels.join('') + name).toLowerCase();
 
-      // 推断奖励类型
-      let rewardType = '混合';
-      if (/现金|奖金|瓜分|红包|元\b|万元/.test(tagText + name)) rewardType = '现金瓜分';
-      else if (/流量|扶持|推荐|曝光|热门/.test(tagText + name)) rewardType = '流量扶持';
-      else if (/奖品|周边|礼品|实物|抽奖|礼包/.test(tagText + name)) rewardType = '周边抽奖';
+    const categories = inferCategories(text);
+    const primaryCategory = categories[0];
 
-      // 推断投稿分区
-      let submitZone = '生活区';
-      if (categories.includes('游戏')) submitZone = '游戏区';
-      else if (categories.includes('动画') || categories.includes('影视')) submitZone = '动画区';
-      else if (categories.includes('音乐')) submitZone = '音乐区';
-      else if (categories.includes('知识')) submitZone = '知识区';
-      else if (categories.includes('美食')) submitZone = '美食区';
+    return {
+      id: item.id || index + 1,
+      title: name,
+      category: primaryCategory,
+      categories: categories,
+      tags: labels,
+      startDate: item.stime ? formatTimestamp(item.stime) : '',
+      endDate: item.etime ? formatTimestamp(item.etime) : '',
+      rewardType: inferRewardType(text),
+      rewardDesc: labels.filter(l => /奖金|瓜分|奖励|激励|扶持|周边|抽奖|材料|道具/.test(l)).join('、') || '详见活动页面',
+      submitZone: inferSubmitZone(primaryCategory),
+      submitTag: `#${name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '') || '活动'}#`,
+      url: item.act_url || '',
+      cover: item.cover || '',
+      difficulty: inferDifficulty(text, primaryCategory),
+      competition: inferCompetition(primaryCategory, labels),
+      suitableFor: inferSuitableFor(text, primaryCategory),
+      desc: `${name}活动，${labels.join('、')}。详见活动页面。`
+    };
+  }
 
-      return {
-        id: item.id || i + 1,
-        title: name,
-        category: categories[0],
-        categories: [...new Set(categories)],
-        tags: tags,
-        startDate: item.stime ? new Date(item.stime * 1000).toISOString().slice(0, 10) : '',
-        endDate: item.etime ? new Date(item.etime * 1000).toISOString().slice(0, 10) : '',
-        rewardType: rewardType,
-        rewardDesc: '详见活动页面',
-        submitZone: submitZone,
-        submitTag: `#${name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '')}#`,
-        url: item.act_url || '',
-        cover: item.cover || '',
-        difficulty: '低',
-        competition: '低',
-        suitableFor: [],
-        desc: name
-      };
-    });
+  function inferCategories(text) {
+    const cats = [];
+    if (/游戏|手游|端游|攻略|FPS|射击|MOBA|原神|崩坏|星穹|鸣潮|永劫|阴阳师|蛋仔|暗区|三角洲|火影|逆水寒|异环|重返未来|游戏王|P5X|物华弥新|遗忘之海|蔚蓝档案|无限暖暖|APEX|LOL|光遇|战双|绝区零|明日方舟|第五人格|和平精英|王者荣耀|无畏契约|瓦罗兰特/.test(text)) cats.push('游戏');
+    if (/动画|番剧|国创|动漫|鬼畜|黄绿合战|同人|Bonly|cosplay|绘画|手书|up动画|动画剧场|手搓动画|3d动画|MAD|AMV|EVA|RE0|re0|凡人修仙|雪王动画|动漫二创|二创/.test(text)) cats.push('动画');
+    if (/影视|电影|电视剧|漫威|复联|解说|盘点|短片|AI影视|影视解说/.test(text)) cats.push('影视');
+    if (/音乐|MV|原创音乐|唱歌|编曲|Vsinger|洛天依|宅舞|舞蹈|直拍|饭拍|演唱会|live现场|音乐现场|音乐MV|音mad|鬼畜调教/.test(text)) cats.push('音乐');
+    if (/知识|科普|科学|历史|人文|诺贝尔|长视频/.test(text)) cats.push('知识');
+    if (/美食|料理|做饭|烘焙|探店/.test(text)) cats.push('美食');
+    if (/亲子|家庭|育儿|宝宝/.test(text)) cats.push('亲子');
+    if (/科技|数码|测评|汽车|方程豹|海尔|品牌合作/.test(text)) cats.push('科技');
+    if (/vlog|生活|日常|旅行|跨文化|外国人|播客|单口|开麦|手工|DIY|赛车|体育|赛事|直播|切片|主播|二次元/.test(text)) cats.push('综合');
+    if (cats.length === 0) cats.push('综合');
+    return cats;
+  }
+
+  function inferRewardType(text) {
+    if (/瓜分/.test(text)) return '现金瓜分';
+    if (/奖金|奖金池|万奖金/.test(text)) return '固定奖金';
+    if (/流量扶持|流量激励|曝光/.test(text)) return '流量扶持';
+    if (/道具|材料|战力|星声|游戏内/.test(text)) return '游戏道具';
+    if (/周边|抽奖|贝壳金/.test(text)) return '周边抽奖';
+    return '混合';
+  }
+
+  function inferDifficulty(text, category) {
+    if (/宅舞|舞蹈|cosplay|绘画|手书|同人|调教|编曲|原创音乐|鬼畜|调音/.test(text)) return '高';
+    if (/品牌合作|海尔|方程豹|高能净界/.test(text)) return '高';
+    if (category === '游戏') return '中';
+    if (/征稿|有奖|激励|瓜分|扶持/.test(text)) return '低';
+    return '低';
+  }
+
+  function inferCompetition(category, labels) {
+    if (category === '游戏' && /原神|崩坏|星穹|鸣潮|永劫|蛋仔/.test(labels.join(''))) return '高';
+    if (category === '游戏') return '中';
+    if (category === '综合') return '中';
+    return '低';
+  }
+
+  function inferSubmitZone(category) {
+    const map = { '游戏': '游戏区', '影视': '影视区', '音乐': '音乐区', '知识': '知识区', '动画': '动画区', '美食': '美食区', '亲子': '生活区', '科技': '科技区', '综合': '生活区/综合', '鬼畜': '鬼畜区' };
+    return map[category] || '生活区';
+  }
+
+  function inferSuitableFor(text, category) {
+    const result = [];
+    if (/解说|吐槽|盘点|混剪|剪辑/.test(text)) result.push('解说', '剪辑', '混剪', '盘点');
+    if (/攻略/.test(text)) result.push('攻略');
+    if (/vlog|日常|生活|旅行/.test(text)) result.push('vlog', '生活', '日常', '旅行');
+    if (/美食|料理|做饭|烘焙|探店/.test(text)) result.push('美食', '做饭', '探店');
+    if (/音乐|MV|唱歌|原创/.test(text)) result.push('音乐', '唱歌', 'MV');
+    if (/舞蹈|宅舞|直拍|饭拍/.test(text)) result.push('舞蹈', '直拍');
+    if (/科普|知识|科学|历史|人文|诺贝尔/.test(text)) result.push('科普', '知识', '历史');
+    if (/手工|DIY|折纸|粘土/.test(text)) result.push('手工', 'DIY', '教程');
+    if (/播客|单口|开麦|聊天/.test(text)) result.push('播客', '单口', '聊天', '分享');
+    if (/cosplay|绘画|同人|手书/.test(text)) result.push('cosplay', '绘画', '同人');
+    if (/鬼畜|调音/.test(text)) result.push('鬼畜', '调音');
+    if (/赛车|体育|赛事/.test(text)) result.push('赛车', '体育', '赛事');
+    if (/亲子|家庭|育儿/.test(text)) result.push('亲子', '家庭', '育儿');
+    if (/影视|电影|电视剧|漫威/.test(text)) result.push('影视', '电影', '电视剧');
+    if (category === '游戏') result.push('游戏', '解说');
+    if (/二创|同人/.test(text)) result.push('二创');
+    return [...new Set(result)];
   }
 
   // ========== 筛选逻辑 ==========
@@ -343,11 +414,13 @@
           <span class="baf-filter-btn" data-reward="现金瓜分">现金瓜分</span>
           <span class="baf-filter-btn" data-reward="固定奖金">固定奖金</span>
           <span class="baf-filter-btn" data-reward="流量扶持">流量扶持</span>
+          <span class="baf-filter-btn" data-reward="游戏道具">游戏道具</span>
+          <span class="baf-filter-btn" data-reward="周边抽奖">周边抽奖</span>
         </div>
       </div>
       <div class="baf-search-row">
         <input type="text" class="baf-search-input" id="baf-search" placeholder="搜索活动名称、标签..." />
-        <input type="text" class="baf-video-type-input" id="baf-video-type" placeholder="我的视频类型（如：影视解说）" value="${settings.videoType || ''}" />
+        <input type="text" class="baf-video-type-input" id="baf-video-type" placeholder="我的视频类型（如：影视解说）" value="${esc(settings.videoType || '')}" />
         <select class="baf-select" id="baf-sort">
           <option value="days-asc">截止时间（近→远）</option>
           <option value="days-desc">截止时间（远→近）</option>
@@ -400,31 +473,37 @@
     listContainer.innerHTML = list.map(a => {
       const days = daysLeft(a.endDate);
       const match = calcMatch(a, settings.videoType);
-      const isHighMatch = match !== null && match >= 50;
+      const matchLevel = match === null ? null : match >= 50 ? 'high' : match >= 25 ? 'medium' : 'low';
+      const isHighMatch = matchLevel === 'high';
       const daysClass = days <= 7 ? 'baf-days-urgent' : days <= 30 ? 'baf-days-normal' : 'baf-days-long';
       const daysText = days < 0 ? '已结束' : days === 0 ? '今天截止' : `剩余${days}天`;
       const catIcon = getCategoryIcon(a.category, a.tags);
+      const matchBadge = match === null ? '' : matchLevel === 'high'
+        ? `<span class="baf-badge baf-badge-match" style="display:inline-block;">⭐ 高度匹配 ${match}%</span>`
+        : matchLevel === 'medium'
+          ? `<span class="baf-badge baf-badge-mid" style="display:inline-block;">🔹 中度匹配 ${match}%</span>`
+          : `<span class="baf-badge baf-badge-low" style="display:inline-block;">匹配度 ${match}%</span>`;
 
       return `
-        <div class="baf-activity-item ${isHighMatch ? 'baf-high-match' : ''}" data-url="${a.url}" data-id="${a.id}">
-          <div class="baf-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${catIcon.label}">${catIcon.icon}</div>
-          <div class="baf-activity-item-title">${a.title}</div>
+        <div class="baf-activity-item ${isHighMatch ? 'baf-high-match' : ''}" data-url="${esc(a.url)}" data-id="${Number(a.id) || 0}">
+          <div class="baf-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${esc(catIcon.label)}">${catIcon.icon}</div>
+          <div class="baf-activity-item-title">${esc(a.title)}</div>
           <div class="baf-activity-item-cats">
             ${(a.categories || [a.category]).map(c => {
               const colors = (catColors[c] || '#f0f0f0,#595959').split(',');
-              return `<span class="baf-cat-tag" style="background:${colors[0]};color:${colors[1]};">${c}</span>`;
+              return `<span class="baf-cat-tag" style="background:${colors[0]};color:${colors[1]};">${esc(c)}</span>`;
             }).join('')}
           </div>
           <div class="baf-activity-item-tags">
-            ${(a.tags || []).slice(0, 4).map(t => `<span class="baf-activity-item-tag">${t}</span>`).join('')}
+            ${(a.tags || []).slice(0, 4).map(t => `<span class="baf-activity-item-tag">${esc(t)}</span>`).join('')}
           </div>
           <div class="baf-activity-item-info">
             📅 ${formatDate(a.startDate)} - ${formatDate(a.endDate)}<br>
-            🏷️ ${a.submitTag}<br>
-            📂 ${a.submitZone}
+            🏷️ ${esc(a.submitTag)}<br>
+            📂 ${esc(a.submitZone)}
           </div>
-          <div class="baf-activity-item-reward">💰 ${a.rewardType}：${a.rewardDesc}</div>
-          ${match !== null ? `<div style="margin-top:6px;"><span class="baf-badge baf-badge-match" style="display:inline-block;">匹配度 ${match}%</span></div>` : ''}
+          <div class="baf-activity-item-reward">💰 ${esc(a.rewardType)}：${esc(a.rewardDesc)}</div>
+          ${matchBadge ? `<div style="margin-top:6px;">${matchBadge}</div>` : ''}
           <div class="baf-activity-item-footer">
             <span class="${daysClass}">${daysText}</span>
             ${a.url ? '<span style="color:#fb7299;">点击投稿 →</span>' : ''}
@@ -442,6 +521,8 @@
   }
 
   // ========== 事件绑定 ==========
+  const debouncedRender = debounce(() => renderActivityList());
+
   function bindToolbarEvents() {
     document.querySelectorAll('#baf-cat-btns .baf-filter-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -475,13 +556,13 @@
 
     document.getElementById('baf-search').addEventListener('input', (e) => {
       settings.filters.search = e.target.value;
-      renderActivityList();
+      debouncedRender();
     });
 
     document.getElementById('baf-video-type').addEventListener('input', (e) => {
       settings.videoType = e.target.value;
       saveSettings();
-      renderActivityList();
+      debouncedRender();
     });
 
     document.getElementById('baf-sort').addEventListener('change', (e) => {

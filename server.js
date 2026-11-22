@@ -13,7 +13,7 @@ const express = require('express');
 const path = require('path');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8011; // 3000 与本机 swagger-web 撞车，dev-hub 注册表不支持 env，故改默认值
 const CACHE_DURATION = 60 * 60 * 1000; // 1小时缓存
 
 // B站活动API
@@ -26,6 +26,9 @@ let cache = {
   timestamp: 0
 };
 
+// 正在进行中的抓取任务（多个请求并发到达时复用同一次抓取，避免轰炸B站接口）
+let inflightFetch = null;
+
 /**
  * 从B站API获取单页活动数据
  */
@@ -35,7 +38,8 @@ async function fetchPage(pn) {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       'Referer': 'https://www.bilibili.com/'
-    }
+    },
+    signal: AbortSignal.timeout(10000) // 10秒超时，避免B站接口挂起拖死请求
   });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return resp.json();
@@ -69,6 +73,16 @@ async function fetchAllActivities() {
   }
   
   return allItems;
+}
+
+/**
+ * 缓存过期瞬间的并发请求复用同一次抓取，避免重复轰炸B站接口
+ */
+function fetchWithInflightReuse() {
+  if (!inflightFetch) {
+    inflightFetch = fetchAllActivities().finally(() => { inflightFetch = null; });
+  }
+  return inflightFetch;
 }
 
 /**
@@ -252,8 +266,8 @@ function inferSuitableFor(labels, name, category) {
   return [...new Set(result)];
 }
 
-// 静态文件服务
-app.use(express.static(__dirname));
+// 静态文件服务（只暴露 public 目录，避免泄露 server.js 源码、打包产物等私有文件）
+app.use(express.static(path.join(__dirname, 'public')));
 
 // API: 获取活动列表
 app.get('/api/activities', async (req, res) => {
@@ -272,7 +286,7 @@ app.get('/api/activities', async (req, res) => {
     }
     
     console.log('[API] 正在从B站获取活动数据...');
-    const rawItems = await fetchAllActivities();
+    const rawItems = await fetchWithInflightReuse();
     const transformed = transformActivities(rawItems);
     
     // 更新缓存

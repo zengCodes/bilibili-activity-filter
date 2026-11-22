@@ -3,11 +3,28 @@
  */
 
 let activities = [];
-const TODAY = new Date();
+
+// HTML 转义：所有来自B站API的字符串插入模板前必须经过此函数
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function today() {
+  return new Date(); // 每次现取，避免弹窗跨午夜后剩余天数全错
+}
+
+// 防抖：输入停止 300ms 后才触发重渲染
+function debounce(fn, delay = 300) {
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
 
 function daysLeft(endDate) {
   const end = new Date(endDate);
-  return Math.ceil((end - TODAY) / (1000 * 60 * 60 * 24));
+  return Math.ceil((end - today()) / (1000 * 60 * 60 * 24));
 }
 
 function formatDate(dateStr) {
@@ -112,16 +129,16 @@ function renderEndingList() {
     const daysClass = days <= 3 ? 'days-urgent' : days <= 7 ? 'days-normal' : 'days-long';
     const daysText = days === 0 ? '今天截止' : `剩余${days}天`;
     const matchBadge = a.match !== null
-      ? `<span class="match-badge ${a.match >= 70 ? 'match-high' : a.match >= 40 ? 'match-mid' : 'match-low'}">匹配${a.match}%</span>`
+      ? `<span class="match-badge ${a.match >= 50 ? 'match-high' : a.match >= 25 ? 'match-mid' : 'match-low'}">匹配${a.match}%</span>`
       : '';
 
     return `
-      <div class="activity-item" data-url="${a.url}">
-        <div class="activity-item-title">${a.title}</div>
+      <div class="activity-item" data-url="${esc(a.url)}">
+        <div class="activity-item-title">${esc(a.title)}</div>
         <div class="activity-item-meta">
           <span class="${daysClass}">${daysText}</span>
           ${matchBadge}
-          <span class="reward-text">${a.rewardType}</span>
+          <span class="reward-text">${esc(a.rewardType)}</span>
         </div>
       </div>
     `;
@@ -140,10 +157,11 @@ function showError(msg) {
   document.getElementById('endingList').innerHTML = `<div class="empty">${msg}</div>`;
 }
 
-// 事件绑定
+// 事件绑定（防抖）
+const debouncedRender = debounce(() => renderEndingList());
 document.getElementById('videoType').addEventListener('input', () => {
   saveSettings();
-  renderEndingList();
+  debouncedRender();
 });
 
 document.getElementById('openPageBtn').addEventListener('click', () => {

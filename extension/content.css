@@ -192,6 +192,14 @@
   background: #52c41a;
 }
 
+.baf-badge-mid {
+  background: #1890ff;
+}
+
+.baf-badge-low {
+  background: #9499a0;
+}
+
 /* 活动详情悬浮卡片 */
 .baf-tooltip {
   position: fixed;

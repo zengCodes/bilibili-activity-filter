@@ -625,12 +625,29 @@ const state = {
 };
 
 let ACTIVITIES = []; // 运行时数据，从API或本地fallback加载
-const TODAY = new Date(); // 使用当前日期
 
 // ========== 工具函数 ==========
+// HTML 转义：所有来自B站API的字符串插入模板前必须经过此函数
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function today() {
+  return new Date(); // 每次现取，避免页面跨午夜后剩余天数全错
+}
+
+// 防抖：搜索/输入停止 300ms 后才触发重渲染，避免每敲一个字全量重算
+function debounce(fn, delay = 300) {
+  let timer = null;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
 function daysLeft(endDate) {
   const end = new Date(endDate);
-  const diff = Math.ceil((end - TODAY) / (1000 * 60 * 60 * 24));
+  const diff = Math.ceil((end - today()) / (1000 * 60 * 60 * 24));
   return diff;
 }
 
@@ -825,29 +842,29 @@ function renderCards() {
     const catIcon = getCategoryIcon(a.category, a.tags);
 
     return `
-      <div class="activity-card ${matchLevel === 'high' ? 'high-match' : ''} ${isEndingSoon ? 'ending-soon' : ''}" onclick="openModal(${a.id})">
-        <div class="card-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${catIcon.label}">${catIcon.icon}</div>
+      <div class="activity-card ${matchLevel === 'high' ? 'high-match' : ''} ${isEndingSoon ? 'ending-soon' : ''}" onclick="openModal(${Number(a.id) || 0})">
+        <div class="card-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${esc(catIcon.label)}">${catIcon.icon}</div>
         <div class="card-header">
-          <div class="card-title" style="padding-left:36px;">${a.title}</div>
+          <div class="card-title" style="padding-left:36px;">${esc(a.title)}</div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:120px;">
-            ${(a.categories || [a.category]).map(c => `<span class="card-category cat-${c}" style="font-size:10px;padding:2px 6px;">${c}</span>`).join('')}
+            ${(a.categories || [a.category]).map(c => `<span class="card-category cat-${c}" style="font-size:10px;padding:2px 6px;">${esc(c)}</span>`).join('')}
           </div>
         </div>
         <div class="card-tags">
-          ${a.tags.map(t => `<span class="card-tag">${t}</span>`).join('')}
+          ${a.tags.map(t => `<span class="card-tag">${esc(t)}</span>`).join('')}
         </div>
         <div class="card-info">
           <div class="row"><span class="icon">📅</span> ${formatDate(a.startDate)} - ${formatDate(a.endDate)}</div>
-          <div class="row"><span class="icon">🏷️</span> 投稿话题：${a.submitTag}</div>
-          <div class="row"><span class="icon">📂</span> 投稿分区：${a.submitZone}</div>
+          <div class="row"><span class="icon">🏷️</span> 投稿话题：${esc(a.submitTag)}</div>
+          <div class="row"><span class="icon">📂</span> 投稿分区：${esc(a.submitZone)}</div>
         </div>
         <div class="card-reward">
-          💰 ${a.rewardType}：${a.rewardDesc}
+          💰 ${esc(a.rewardType)}：${esc(a.rewardDesc)}
         </div>
         ${match !== null ? `<span class="card-match-badge match-${matchLevel}">${getMatchText(match)}</span>` : ''}
         <div class="card-footer">
           <span class="days-left ${daysClass}">${daysText}</span>
-          ${a.url ? `<a href="${a.url}" target="_blank" class="card-link" onclick="event.stopPropagation()">查看详情 →</a>` : '<span style="color:#ccc;font-size:12px;">点击查看详情</span>'}
+          ${a.url ? `<a href="${esc(a.url)}" target="_blank" class="card-link" onclick="event.stopPropagation()">查看详情 →</a>` : '<span style="color:#ccc;font-size:12px;">点击查看详情</span>'}
         </div>
       </div>
     `;
@@ -865,8 +882,8 @@ function openModal(id) {
 
   document.getElementById('modalTitle').textContent = a.title;
   document.getElementById('modalTags').innerHTML = `
-    ${(a.categories || [a.category]).map(c => `<span class="card-category cat-${c}">${c}</span>`).join('')}
-    ${a.tags.map(t => `<span class="card-tag">${t}</span>`).join('')}
+    ${(a.categories || [a.category]).map(c => `<span class="card-category cat-${c}">${esc(c)}</span>`).join('')}
+    ${a.tags.map(t => `<span class="card-tag">${esc(t)}</span>`).join('')}
     ${match !== null ? `<span class="card-match-badge match-${matchLevel}">${getMatchText(match)}</span>` : ''}
   `;
 
@@ -885,25 +902,25 @@ function openModal(id) {
         </div>
         <div class="info-item">
           <div class="label">奖励类型</div>
-          <div class="value">${a.rewardType}</div>
+          <div class="value">${esc(a.rewardType)}</div>
         </div>
         <div class="info-item">
           <div class="label">参赛门槛</div>
-          <div class="value">${a.difficulty}（竞争${a.competition}）</div>
+          <div class="value">${esc(a.difficulty)}（竞争${esc(a.competition)}）</div>
         </div>
       </div>
     </div>
 
     <div class="modal-section">
       <h3>📝 活动简介</h3>
-      <p>${a.desc}</p>
+      <p>${esc(a.desc)}</p>
     </div>
 
     <div class="modal-section">
       <h3>🚀 投稿指引</h3>
       <div class="submit-guide">
-        <strong>投稿分区：</strong>${a.submitZone}<br>
-        <strong>话题标签：</strong>${a.submitTag}<br>
+        <strong>投稿分区：</strong>${esc(a.submitZone)}<br>
+        <strong>话题标签：</strong>${esc(a.submitTag)}<br>
         <strong>投稿步骤：</strong>在B站投稿时选择对应分区，并在标题/简介中带上活动话题标签，系统会自动识别参与活动。
       </div>
     </div>
@@ -911,7 +928,7 @@ function openModal(id) {
     <div class="modal-section">
       <h3>🏆 奖励说明</h3>
       <div class="reward-box">
-        ${a.rewardDesc}<br>
+        ${esc(a.rewardDesc)}<br>
         <span style="font-size:12px;opacity:0.8;">* 具体奖励规则以活动页面为准，通常活动结束后30个工作日内发放</span>
       </div>
     </div>
@@ -919,12 +936,12 @@ function openModal(id) {
     <div class="modal-section">
       <h3>🎯 适合的视频类型</h3>
       <div class="card-tags">
-        ${a.suitableFor.map(s => `<span class="card-tag" style="background:#e6f7ff;color:#1890ff;">${s}</span>`).join('')}
+        ${a.suitableFor.map(s => `<span class="card-tag" style="background:#e6f7ff;color:#1890ff;">${esc(s)}</span>`).join('')}
       </div>
     </div>
 
     <div class="modal-actions">
-      ${a.url ? `<a href="${a.url}" target="_blank" class="btn btn-primary">前往活动页面</a>` : '<a href="https://www.bilibili.com/blackboard/era/reward-activity-list-page.html#/list" target="_blank" class="btn btn-primary">去B站活动中心查找</a>'}
+      ${a.url ? `<a href="${esc(a.url)}" target="_blank" class="btn btn-primary">前往活动页面</a>` : '<a href="https://www.bilibili.com/blackboard/era/reward-activity-list-page.html#/list" target="_blank" class="btn btn-primary">去B站活动中心查找</a>'}
       <button class="btn btn-secondary" onclick="closeModal()">关闭</button>
     </div>
   `;
@@ -978,10 +995,11 @@ function bindEvents() {
     });
   });
 
-  // 搜索
+  // 搜索（防抖）
+  const debouncedSearch = debounce(() => renderCards());
   document.getElementById('searchInput').addEventListener('input', (e) => {
     state.search = e.target.value;
-    renderCards();
+    debouncedSearch();
   });
 
   // 排序
@@ -990,10 +1008,11 @@ function bindEvents() {
     renderCards();
   });
 
-  // 适合度
+  // 适合度（防抖）
+  const debouncedSuitability = debounce(() => renderCards());
   document.getElementById('suitabilityInput').addEventListener('input', (e) => {
     state.suitability = e.target.value;
-    renderCards();
+    debouncedSuitability();
   });
 }
 

@@ -20,12 +20,28 @@
     }
   };
 
-  const TODAY = new Date();
-
   // ========== 工具函数 ==========
+  // HTML 转义：所有来自B站API的字符串插入模板前必须经过此函数
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function today() {
+    return new Date(); // 每次现取，避免页面跨午夜后剩余天数全错
+  }
+
+  // 防抖：搜索/输入停止 300ms 后才触发重渲染
+  function debounce(fn, delay = 300) {
+    let timer = null;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn(...args), delay);
+    };
+  }
+
   function daysLeft(endDate) {
     const end = new Date(endDate);
-    return Math.ceil((end - TODAY) / (1000 * 60 * 60 * 24));
+    return Math.ceil((end - today()) / (1000 * 60 * 60 * 24));
   }
 
   function formatDate(dateStr) {
@@ -105,26 +121,45 @@
       pages.forEach(p => { if (p.data?.list) items = items.concat(p.data.list); });
     }
 
-    // 简单转换
-    return items.map((item, i) => ({
+    // 抓到原始数据后交给 background 做完整推断转换，保证筛选/匹配与正常路径一致
+    try {
+      const resp = await chrome.runtime.sendMessage({ type: 'TRANSFORM_ACTIVITIES', payload: items });
+      if (resp && resp.success && Array.isArray(resp.data)) return resp.data;
+      throw new Error(resp?.error || '转换失败');
+    } catch (e) {
+      console.warn('[B站活动筛选助手] background转换不可用，使用极简兜底（筛选/匹配功能受限）:', e);
+      return items.map(minimalTransform);
+    }
+  }
+
+  // 极简兜底转换：分类/奖励/匹配推断全部缺失，仅保证列表可展示
+  function minimalTransform(item, i) {
+    const name = item.name || '';
+    return {
       id: item.id || i + 1,
-      title: item.name,
+      title: name,
       category: '综合',
       categories: ['综合'],
       tags: item.hot_labels || [],
-      startDate: item.stime ? new Date(item.stime * 1000).toISOString().slice(0, 10) : '',
-      endDate: item.etime ? new Date(item.etime * 1000).toISOString().slice(0, 10) : '',
+      startDate: item.stime ? formatTimestamp(item.stime) : '',
+      endDate: item.etime ? formatTimestamp(item.etime) : '',
       rewardType: '混合',
       rewardDesc: '详见活动页面',
       submitZone: '生活区',
-      submitTag: `#${item.name?.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '')}#`,
+      submitTag: `#${name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '') || '活动'}#`,
       url: item.act_url || '',
       cover: item.cover || '',
       difficulty: '低',
       competition: '低',
       suitableFor: [],
-      desc: item.name
-    }));
+      desc: `${name}活动，${(item.hot_labels || []).join('、')}。详见活动页面。`
+    };
+  }
+
+  // Unix 时间戳 → 本地时区日期（YYYY-MM-DD），与 Web 版/油猴保持一致
+  function formatTimestamp(ts) {
+    const d = new Date(ts * 1000);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
   // ========== 筛选逻辑 ==========
@@ -223,7 +258,7 @@
       </div>
       <div class="baf-search-row">
         <input type="text" class="baf-search-input" id="baf-search" placeholder="搜索活动名称、标签..." />
-        <input type="text" class="baf-video-type-input" id="baf-video-type" placeholder="我的视频类型（如：影视解说）" value="${settings.videoType || ''}" />
+        <input type="text" class="baf-video-type-input" id="baf-video-type" placeholder="我的视频类型（如：影视解说）" value="${esc(settings.videoType || '')}" />
         <select class="baf-select" id="baf-sort">
           <option value="days-asc">截止时间（近→远）</option>
           <option value="days-desc">截止时间（远→近）</option>
@@ -319,7 +354,8 @@
     listContainer.innerHTML = list.map(a => {
       const days = daysLeft(a.endDate);
       const match = calcMatch(a, settings.videoType);
-      const isHighMatch = match !== null && match >= 50;
+      const matchLevel = match === null ? null : match >= 50 ? 'high' : match >= 25 ? 'medium' : 'low';
+      const isHighMatch = matchLevel === 'high';
       const isEndingSoon = days >= 0 && days <= 7;
       const daysClass = days <= 7 ? 'baf-days-urgent' : days <= 30 ? 'baf-days-normal' : 'baf-days-long';
       const daysText = days < 0 ? '已结束' : days === 0 ? '今天截止' : `剩余${days}天`;
@@ -334,26 +370,32 @@
         '鬼畜': '#fff1f0,#f5222d'
       };
 
+      const matchBadge = match === null ? '' : matchLevel === 'high'
+        ? `<span class="baf-badge baf-badge-match" style="display:inline-block;">⭐ 高度匹配 ${match}%</span>`
+        : matchLevel === 'medium'
+          ? `<span class="baf-badge baf-badge-mid" style="display:inline-block;">🔹 中度匹配 ${match}%</span>`
+          : `<span class="baf-badge baf-badge-low" style="display:inline-block;">匹配度 ${match}%</span>`;
+
       return `
-        <div class="baf-activity-item ${isHighMatch ? 'baf-high-match' : ''} ${isEndingSoon ? 'baf-ending-soon' : ''}" data-url="${a.url}" data-id="${a.id}">
-          <div class="baf-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${catIcon.label}">${catIcon.icon}</div>
-          <div class="baf-activity-item-title">${a.title}</div>
+        <div class="baf-activity-item ${isHighMatch ? 'baf-high-match' : ''} ${isEndingSoon ? 'baf-ending-soon' : ''}" data-url="${esc(a.url)}" data-id="${Number(a.id) || 0}">
+          <div class="baf-cat-badge" style="background:${catIcon.bg};color:${catIcon.color};" title="${esc(catIcon.label)}">${catIcon.icon}</div>
+          <div class="baf-activity-item-title">${esc(a.title)}</div>
           <div class="baf-activity-item-cats">
             ${(a.categories || [a.category]).map(c => {
               const colors = (catColors[c] || '#f0f0f0,#595959').split(',');
-              return `<span class="baf-cat-tag" style="background:${colors[0]};color:${colors[1]};">${c}</span>`;
+              return `<span class="baf-cat-tag" style="background:${colors[0]};color:${colors[1]};">${esc(c)}</span>`;
             }).join('')}
           </div>
           <div class="baf-activity-item-tags">
-            ${a.tags.slice(0, 4).map(t => `<span class="baf-activity-item-tag">${t}</span>`).join('')}
+            ${a.tags.slice(0, 4).map(t => `<span class="baf-activity-item-tag">${esc(t)}</span>`).join('')}
           </div>
           <div class="baf-activity-item-info">
             📅 ${formatDate(a.startDate)} - ${formatDate(a.endDate)}<br>
-            🏷️ ${a.submitTag}<br>
-            📂 ${a.submitZone}
+            🏷️ ${esc(a.submitTag)}<br>
+            📂 ${esc(a.submitZone)}
           </div>
-          <div class="baf-activity-item-reward">💰 ${a.rewardType}：${a.rewardDesc}</div>
-          ${match !== null ? `<div style="margin-top:6px;"><span class="baf-badge baf-badge-match" style="display:inline-block;">匹配度 ${match}%</span></div>` : ''}
+          <div class="baf-activity-item-reward">💰 ${esc(a.rewardType)}：${esc(a.rewardDesc)}</div>
+          ${matchBadge ? `<div style="margin-top:6px;">${matchBadge}</div>` : ''}
           <div class="baf-activity-item-footer">
             <span class="${daysClass}">${daysText}</span>
             ${a.url ? '<span style="color:#fb7299;">点击投稿 →</span>' : ''}
@@ -406,17 +448,18 @@
       });
     });
 
-    // 搜索
+    // 搜索（防抖）
+    const debouncedRender = debounce(() => renderActivityList());
     document.getElementById('baf-search').addEventListener('input', (e) => {
       settings.filters.search = e.target.value;
-      renderActivityList();
+      debouncedRender();
     });
 
-    // 视频类型
+    // 视频类型（防抖）
     document.getElementById('baf-video-type').addEventListener('input', (e) => {
       settings.videoType = e.target.value;
       saveSettings();
-      renderActivityList();
+      debouncedRender();
     });
 
     // 排序

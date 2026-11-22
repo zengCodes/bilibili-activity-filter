@@ -31,6 +31,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // 保持消息通道开放
   }
 
+  // content script 降级自行抓到原始数据后，交给 background 做完整推断转换
+  if (request.type === 'TRANSFORM_ACTIVITIES') {
+    try {
+      const items = Array.isArray(request.payload) ? request.payload : [];
+      const data = items.map((item, index) => transformActivity(item, index));
+      sendResponse({ success: true, data });
+    } catch (err) {
+      sendResponse({ success: false, error: err.message });
+    }
+    return true;
+  }
+
   if (request.type === 'GET_SETTINGS') {
     chrome.storage.sync.get(null).then(settings => {
       sendResponse({ success: true, settings });
