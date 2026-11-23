@@ -3,8 +3,8 @@
 // @name:zh-CN   B站活动筛选助手
 // @namespace    https://github.com/zengCodes/bilibili-activity-filter
 // @version      0.0.0-src（构建时由 scripts/build.js 注入 package.json 版本号）
-// @description  实时获取B站173+投稿活动，智能匹配你的视频类型，支持分类/时间/奖励/门槛筛选、匹配度排序、截止提醒
-// @description:zh-CN 实时获取B站173+投稿活动，智能匹配你的视频类型，支持分类/时间/奖励/门槛筛选、匹配度排序、截止提醒
+// @description  实时获取B站170+投稿活动，按分类/时间/奖励筛选，按你的视频类型计算匹配度，支持收藏与截止提醒
+// @description:zh-CN 实时获取B站170+投稿活动，按分类/时间/奖励筛选，按你的视频类型计算匹配度，支持收藏与截止提醒
 // @author       zengCodes
 // @match        https://www.bilibili.com/blackboard/era/reward-activity-list-page.html*
 // @grant        none
