@@ -45,7 +45,7 @@
     { name: '动画', patterns: ['动画', '番剧', '国创', '动漫', '鬼畜', '黄绿合战', '同人', 'Bonly', 'cosplay', '绘画', '手书', 'up动画', '动画剧场', '手搓动画', '3d动画', 'MAD', 'AMV', 'EVA', 'RE0', 're0', '凡人修仙', '雪王动画', '动漫二创', '二创'] },
     { name: '影视', patterns: ['影视', '电影', '电视剧', '漫威', '复联', '解说', '盘点', '短片', 'AI影视', '影视解说'] },
     { name: '音乐', patterns: ['音乐', 'MV', '原创音乐', '唱歌', '编曲', 'Vsinger', '洛天依', '宅舞', '舞蹈', '直拍', '饭拍', '演唱会', 'live现场', '音乐现场', '音乐MV', '音mad', '鬼畜调教'] },
-    { name: '知识', patterns: ['知识', '科普', '科学', '历史', '人文', '诺贝尔', '长视频'] },
+    { name: '知识', patterns: ['知识', '科普', '科学', '历史', '人文', '诺贝尔', '长视频', '公考', '国考', '考研', '校园学习', '百日招聘', '校企合作', '招聘'] },
     { name: '美食', patterns: ['美食', '料理', '做饭', '烘焙', '探店'] },
     { name: '亲子', patterns: ['亲子', '家庭', '育儿', '宝宝'] },
     { name: '科技', patterns: ['科技', '数码', '测评', '汽车', '方程豹', '海尔', '品牌合作'] },
@@ -56,6 +56,9 @@
   // 动态聚类阈值：同一标签出现在 ≥N 个未命中规则的活动中时，升格为一个动态分类
   //（自适应B站新增领域，如新开"体育"类活动，各活动都带"体育"标签即可自动出现分类按钮）
   const DYNAMIC_CATEGORY_THRESHOLD = 3;
+  // 聚类停用词：奖励/运营类标签不是内容领域，不参与动态分类
+  //（如"流量扶持""万元奖池"，否则工具栏会冒出奖励类型的假分类按钮）
+  const CLUSTER_TAG_BLOCKLIST = /扶持|激励|奖|投稿|征稿|抽奖|福利|有偿|^综合$/;
 
   // ========== 通用工具 ==========
   // HTML 转义：所有来自B站API的字符串插入模板前必须经过此函数
@@ -255,7 +258,7 @@
     const freq = new Map();
     unmatched.forEach(a => (a.tags || []).forEach(t => {
       const key = String(t).trim();
-      if (!key) return;
+      if (!key || CLUSTER_TAG_BLOCKLIST.test(key)) return;
       freq.set(key, (freq.get(key) || 0) + 1);
     }));
 
@@ -390,7 +393,7 @@
   // ========== 导出 ==========
   const BAFCore = {
     API_URL, PAGE_SIZE, WEB_LOCATION,
-    CATEGORY_RULES, FALLBACK_CATEGORY, DYNAMIC_CATEGORY_THRESHOLD,
+    CATEGORY_RULES, FALLBACK_CATEGORY, DYNAMIC_CATEGORY_THRESHOLD, CLUSTER_TAG_BLOCKLIST,
     esc, today, debounce, daysLeft, formatDate, formatDateShort, formatTimestamp,
     calcMatch, getMatchLevel, getMatchText,
     getCategoryIcon, getRewardWeight,
