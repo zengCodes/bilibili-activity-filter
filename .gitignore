@@ -8,3 +8,6 @@ node_modules/
 # 私人笔记与推广素材（不入库）
 .workbuddy/
 juejin-article/
+
+# 调试文件（不入库）
+debug/
