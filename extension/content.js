@@ -10,6 +10,8 @@
   let activities = [];
   let settings = {
     videoType: '',
+    panelDocked: false,   // 是否停靠到页面右侧（dock 模式）
+    panelHidden: false,   // dock 模式下面板是否被收起（收起后显示悬浮竖条）
     filters: {
       category: 'all',
       time: 'all',
@@ -185,12 +187,17 @@
     toolbar.innerHTML = `
       <div class="baf-header">
         <div class="baf-title"><img src="${chrome.runtime.getURL('icons/icon48.png')}" class="baf-title-logo" alt="logo"> B站活动筛选助手</div>
-        <div class="baf-stats">
-          共 <strong id="baf-total">0</strong> 个活动 |
-          进行中 <strong id="baf-active">0</strong> |
-          本周截止 <strong id="baf-ending">0</strong> |
-          筛选结果 <strong id="baf-result">0</strong>
+        <div class="baf-header-actions">
+          <button type="button" class="baf-icon-btn" id="baf-dock-btn" title="停靠到页面右侧">⇥</button>
+          <button type="button" class="baf-icon-btn" id="baf-undock-btn" title="恢复页面内显示">⇤</button>
+          <button type="button" class="baf-icon-btn" id="baf-close-btn" title="收起面板">✕</button>
         </div>
+      </div>
+      <div class="baf-stats">
+        共 <strong id="baf-total">0</strong> 个活动 |
+        进行中 <strong id="baf-active">0</strong> |
+        本周截止 <strong id="baf-ending">0</strong> |
+        筛选结果 <strong id="baf-result">0</strong>
       </div>
       <div class="baf-filter-row">
         <span class="baf-filter-label">分类</span>
@@ -361,6 +368,105 @@
     });
   }
 
+  // ========== 顶栏避让 ==========
+  // 右侧面板是 fixed 定位，若从 top:0 开始会盖住B站顶栏右侧的头像/大会员/消息。
+  // 实测页面顶栏高度写入 CSS 变量；找不到时保持 0（退回原行为）。
+  function updateTopOffset() {
+    let offset = 0;
+    const consider = (el) => {
+      if (!el) return;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return;
+      const r = el.getBoundingClientRect();
+      if (r.top > 4 || r.height < 40 || r.height > 120) return;
+      if (r.width < window.innerWidth * 0.6) return;
+      offset = Math.max(offset, r.bottom);
+    };
+    // B站新版 / 旧版顶栏的常见选择器
+    for (const sel of [
+      '.bili-header__bar',
+      '.bili-header-bar',
+      '#bili-header .nav-bar',
+      '.bili-header-container .bili-header-bar'
+    ]) {
+      consider(document.querySelector(sel));
+    }
+    // 兜底：扫描名字里带 header / nav 的顶部条
+    if (!offset) {
+      document.querySelectorAll('header, [class*="header"], [id*="header"], [class*="nav-bar"], [id*="nav"]')
+        .forEach(consider);
+    }
+    // 再兜底：扫描 body 下前两层的宽幅顶部横条（不依赖 class 命名）
+    if (!offset) {
+      document.querySelectorAll('body > *, body > * > *').forEach(consider);
+    }
+    document.documentElement.style.setProperty('--baf-top-offset', Math.round(offset) + 'px');
+  }
+
+  // ========== 布局切换（页面内 / 右侧停靠） ==========
+  // 停靠模式：工具栏+列表搬进 fixed 右侧面板，body 加 padding-right 收窄页面；
+  // 同时不再隐藏B站原列表（baf-hide-original），左边照常浏览、右边筛选。
+  function applyLayout() {
+    updateTopOffset();
+    const toolbar = document.getElementById('baf-toolbar');
+    const list = document.getElementById('baf-activity-list');
+    if (!toolbar || !list) return;
+
+    const dockedOpen = !!settings.panelDocked && !settings.panelHidden;
+
+    // 头部按钮按模式显隐：⇥ 仅页面内模式显示；⇤ / ✕ 仅停靠模式显示
+    const dockBtn = document.getElementById('baf-dock-btn');
+    const undockBtn = document.getElementById('baf-undock-btn');
+    const closeBtn = document.getElementById('baf-close-btn');
+    if (dockBtn) dockBtn.style.display = settings.panelDocked ? 'none' : '';
+    if (undockBtn) undockBtn.style.display = settings.panelDocked ? '' : 'none';
+    if (closeBtn) closeBtn.style.display = settings.panelDocked ? '' : 'none';
+
+    if (settings.panelDocked) {
+      let panel = document.getElementById('baf-panel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'baf-panel';
+        panel.className = 'baf-panel';
+        document.body.appendChild(panel);
+      }
+      panel.appendChild(toolbar);
+      panel.appendChild(list);
+      document.body.classList.remove('baf-hide-original');
+    } else {
+      const panel = document.getElementById('baf-panel');
+      if (panel) panel.remove();
+      const container = findActivityContainer();
+      if (container) container.insertBefore(toolbar, container.firstChild);
+      else document.body.appendChild(toolbar);
+      toolbar.parentNode.insertBefore(list, toolbar.nextSibling);
+      document.body.classList.add('baf-hide-original');
+    }
+
+    document.body.classList.toggle('baf-panel-open', dockedOpen);
+    renderFab();
+  }
+
+  // 收起面板后的右侧悬浮竖条：点击重新展开
+  function renderFab() {
+    let fab = document.getElementById('baf-fab');
+    if (!fab) {
+      fab = document.createElement('button');
+      fab.type = 'button';
+      fab.id = 'baf-fab';
+      fab.className = 'baf-fab';
+      fab.title = '打开活动筛选面板';
+      fab.textContent = '筛选助手';
+      fab.addEventListener('click', () => {
+        settings.panelHidden = false;
+        saveSettings();
+        applyLayout();
+      });
+      document.body.appendChild(fab);
+    }
+    document.body.classList.toggle('baf-fab-show', !!settings.panelDocked && !!settings.panelHidden);
+  }
+
   // ========== 事件绑定 ==========
   function bindToolbarEvents() {
     // 分类筛选
@@ -416,6 +522,25 @@
       saveSettings();
       renderActivityList();
     });
+
+    // 布局开关：停靠到右侧 / 恢复页面内 / 收起面板
+    document.getElementById('baf-dock-btn').addEventListener('click', () => {
+      settings.panelDocked = true;
+      settings.panelHidden = false;
+      saveSettings();
+      applyLayout();
+    });
+    document.getElementById('baf-undock-btn').addEventListener('click', () => {
+      settings.panelDocked = false;
+      settings.panelHidden = false;
+      saveSettings();
+      applyLayout();
+    });
+    document.getElementById('baf-close-btn').addEventListener('click', () => {
+      settings.panelHidden = true;
+      saveSettings();
+      applyLayout();
+    });
   }
 
   function saveSettings() {
@@ -431,6 +556,9 @@
     const themeObserver = new MutationObserver(applyDarkMode);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     if (document.body) themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+    // 窗口尺寸变化时重新测量顶栏高度，保持面板不遮挡顶部信息
+    window.addEventListener('resize', debounce(updateTopOffset, 150));
 
     // 显示加载状态
     const loading = document.createElement('div');
@@ -454,12 +582,10 @@
 
     console.log(`[B站活动筛选助手] 加载到 ${activities.length} 个活动`);
 
-    // 渲染工具栏和活动列表
+    // 渲染工具栏和活动列表，并按持久化的布局模式（页面内/右侧停靠）摆放
     renderToolbar();
     renderActivityList();
-
-    // 隐藏原页面的活动列表（如果存在）
-    document.body.classList.add('baf-hide-original');
+    applyLayout();
   }
 
   // 等待页面加载完成

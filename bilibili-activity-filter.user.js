@@ -2,7 +2,7 @@
 // @name         B站活动筛选助手
 // @name:zh-CN   B站活动筛选助手
 // @namespace    https://github.com/zengCodes/bilibili-activity-filter
-// @version      1.1.9
+// @version      1.2.0
 // @description  实时获取B站170+投稿活动，按分类/时间/奖励筛选，按你的视频类型计算匹配度，支持收藏与截止提醒
 // @description:zh-CN 实时获取B站170+投稿活动，按分类/时间/奖励筛选，按你的视频类型计算匹配度，支持收藏与截止提醒
 // @author       zengCodes
@@ -33,6 +33,29 @@
   const API_URL = 'https://api.bilibili.com/x/activity_components/video_activity/hot_activity';
   const PAGE_SIZE = 50;
   const WEB_LOCATION = '888.139379'; // B站活动中心页面的固定跟踪参数
+
+  /**
+   * 分类规则表：B站接口不给分类，只能靠标题+标签推断。
+   * 维护说明：新增/调整分类只改这张表 —— patterns 中任一关键词命中（不区分大小写）
+   * 即归入该分类；数组顺序即主分类优先级（第一个命中的为主分类）。
+   * 未命中任何规则的条目由 transformActivities 的动态聚类兜底（见 DYNAMIC_CATEGORY_THRESHOLD）。
+   */
+  const CATEGORY_RULES = [
+    { name: '游戏', patterns: ['游戏', '手游', '端游', '攻略', 'FPS', '射击', 'MOBA', '原神', '崩坏', '星穹', '鸣潮', '永劫', '阴阳师', '蛋仔', '暗区', '三角洲', '火影', '逆水寒', '异环', '重返未来', '游戏王', 'P5X', '物华弥新', '遗忘之海', '蔚蓝档案', '无限暖暖', 'APEX', 'LOL', '光遇', '战双', '绝区零', '明日方舟', '第五人格', '和平精英', '王者荣耀', '无畏契约', '瓦罗兰特'] },
+    { name: '动画', patterns: ['动画', '番剧', '国创', '动漫', '鬼畜', '黄绿合战', '同人', 'Bonly', 'cosplay', '绘画', '手书', 'up动画', '动画剧场', '手搓动画', '3d动画', 'MAD', 'AMV', 'EVA', 'RE0', 're0', '凡人修仙', '雪王动画', '动漫二创', '二创'] },
+    { name: '影视', patterns: ['影视', '电影', '电视剧', '漫威', '复联', '解说', '盘点', '短片', 'AI影视', '影视解说'] },
+    { name: '音乐', patterns: ['音乐', 'MV', '原创音乐', '唱歌', '编曲', 'Vsinger', '洛天依', '宅舞', '舞蹈', '直拍', '饭拍', '演唱会', 'live现场', '音乐现场', '音乐MV', '音mad', '鬼畜调教'] },
+    { name: '知识', patterns: ['知识', '科普', '科学', '历史', '人文', '诺贝尔', '长视频'] },
+    { name: '美食', patterns: ['美食', '料理', '做饭', '烘焙', '探店'] },
+    { name: '亲子', patterns: ['亲子', '家庭', '育儿', '宝宝'] },
+    { name: '科技', patterns: ['科技', '数码', '测评', '汽车', '方程豹', '海尔', '品牌合作'] },
+    { name: '综合', patterns: ['vlog', '生活', '日常', '旅行', '跨文化', '外国人', '播客', '单口', '开麦', '手工', 'DIY', '赛车', '体育', '赛事', '直播', '切片', '主播', '二次元'] }
+  ];
+  // 规则全部未命中时的兜底分类
+  const FALLBACK_CATEGORY = '综合';
+  // 动态聚类阈值：同一标签出现在 ≥N 个未命中规则的活动中时，升格为一个动态分类
+  //（自适应B站新增领域，如新开"体育"类活动，各活动都带"体育"标签即可自动出现分类按钮）
+  const DYNAMIC_CATEGORY_THRESHOLD = 3;
 
   // ========== 通用工具 ==========
   // HTML 转义：所有来自B站API的字符串插入模板前必须经过此函数
@@ -207,8 +230,60 @@
   }
 
   // ========== 数据转换与推断 ==========
+  /**
+   * 两遍转换：
+   * 第一遍 transformActivity —— 按 CATEGORY_RULES 推断分类，未命中规则的条目
+   *   先挂兜底分类并打 _unclassified 标记；
+   * 第二遍 refineDynamicCategories —— 在未命中规则的条目里做标签聚类，
+   *   高频标签（≥DYNAMIC_CATEGORY_THRESHOLD）升格为动态分类，实现自适应B站新增领域。
+   */
   function transformActivities(items) {
-    return items.map((item, index) => transformActivity(item, index));
+    const list = items.map((item, index) => transformActivity(item, index));
+    refineDynamicCategories(list);
+    return list;
+  }
+
+  /**
+   * 动态聚类兜底：统计未命中规则活动的标签频次，高频标签升格为分类。
+   * 例如B站新开"体育"类活动而规则表尚未收录，各活动都带"体育"标签，
+   * 会自动生成"体育"分类按钮；孤立的条目才落入 FALLBACK_CATEGORY。
+   */
+  function refineDynamicCategories(list) {
+    const unmatched = list.filter(a => a._unclassified);
+    if (unmatched.length === 0) return list;
+
+    const freq = new Map();
+    unmatched.forEach(a => (a.tags || []).forEach(t => {
+      const key = String(t).trim();
+      if (!key) return;
+      freq.set(key, (freq.get(key) || 0) + 1);
+    }));
+
+    const dynamicCats = new Map(
+      Array.from(freq.entries())
+        .filter(([, n]) => n >= DYNAMIC_CATEGORY_THRESHOLD)
+        .sort((x, y) => y[1] - x[1])
+    );
+
+    unmatched.forEach(a => {
+      const hits = (a.tags || [])
+        .map(t => String(t).trim())
+        .filter(t => dynamicCats.has(t))
+        .sort((x, y) => dynamicCats.get(y) - dynamicCats.get(x));
+      a.categories = hits.length ? hits : [FALLBACK_CATEGORY];
+      a.category = a.categories[0];
+
+      // 主分类变了，依赖它的字段一并重算
+      const text = ((a.tags || []).join('') + a.title).toLowerCase();
+      a.submitZone = inferSubmitZone(a.category);
+      a.difficulty = inferDifficulty(text, a.category);
+      a.competition = inferCompetition(a.category, a.tags);
+      a.suitableFor = inferSuitableFor(text, a.category);
+      delete a._unclassified;
+    });
+
+    // 清理规则命中条目上的标记位，保证输出对象干净
+    list.forEach(a => { if ('_unclassified' in a) delete a._unclassified; });
   }
 
   function transformActivity(item, index) {
@@ -216,7 +291,8 @@
     const name = item.name || '';
     const text = (labels.join('') + name).toLowerCase();
 
-    const categories = inferCategories(text);
+    const ruleCats = inferCategories(text);
+    const categories = ruleCats.length ? ruleCats : [FALLBACK_CATEGORY];
     const primaryCategory = categories[0];
 
     return {
@@ -224,6 +300,7 @@
       title: name,
       category: primaryCategory,        // 主分类（用于卡片显示）
       categories: categories,           // 所有分类（用于多分类筛选）
+      _unclassified: ruleCats.length === 0,  // 规则未命中标记，供动态聚类二次处理
       tags: labels,
       startDate: item.stime ? formatTimestamp(item.stime) : '',
       endDate: item.etime ? formatTimestamp(item.etime) : '',
@@ -244,21 +321,15 @@
   }
 
   /**
-   * 从标签和名称推断活动分类（支持多分类）
-   * 返回数组，第一个元素为主分类
+   * 按 CATEGORY_RULES 推断活动分类（支持多分类，第一个元素为主分类）。
+   * 全部未命中时返回空数组，由调用方走动态聚类/兜底分类。
    */
   function inferCategories(text) {
+    const t = String(text || '').toLowerCase();
     const cats = [];
-    if (/游戏|手游|端游|攻略|FPS|射击|MOBA|原神|崩坏|星穹|鸣潮|永劫|阴阳师|蛋仔|暗区|三角洲|火影|逆水寒|异环|重返未来|游戏王|P5X|物华弥新|遗忘之海|蔚蓝档案|无限暖暖|APEX|LOL|光遇|战双|绝区零|明日方舟|第五人格|和平精英|王者荣耀|无畏契约|瓦罗兰特/.test(text)) cats.push('游戏');
-    if (/动画|番剧|国创|动漫|鬼畜|黄绿合战|同人|Bonly|cosplay|绘画|手书|up动画|动画剧场|手搓动画|3d动画|MAD|AMV|EVA|RE0|re0|凡人修仙|雪王动画|动漫二创|二创/.test(text)) cats.push('动画');
-    if (/影视|电影|电视剧|漫威|复联|解说|盘点|短片|AI影视|影视解说/.test(text)) cats.push('影视');
-    if (/音乐|MV|原创音乐|唱歌|编曲|Vsinger|洛天依|宅舞|舞蹈|直拍|饭拍|演唱会|live现场|音乐现场|音乐MV|音mad|鬼畜调教/.test(text)) cats.push('音乐');
-    if (/知识|科普|科学|历史|人文|诺贝尔|长视频/.test(text)) cats.push('知识');
-    if (/美食|料理|做饭|烘焙|探店/.test(text)) cats.push('美食');
-    if (/亲子|家庭|育儿|宝宝/.test(text)) cats.push('亲子');
-    if (/科技|数码|测评|汽车|方程豹|海尔|品牌合作/.test(text)) cats.push('科技');
-    if (/vlog|生活|日常|旅行|跨文化|外国人|播客|单口|开麦|手工|DIY|赛车|体育|赛事|直播|切片|主播|二次元/.test(text)) cats.push('综合');
-    if (cats.length === 0) cats.push('综合');
+    for (const rule of CATEGORY_RULES) {
+      if (rule.patterns.some(p => t.includes(p.toLowerCase()))) cats.push(rule.name);
+    }
     return cats;
   }
 
@@ -319,11 +390,12 @@
   // ========== 导出 ==========
   const BAFCore = {
     API_URL, PAGE_SIZE, WEB_LOCATION,
+    CATEGORY_RULES, FALLBACK_CATEGORY, DYNAMIC_CATEGORY_THRESHOLD,
     esc, today, debounce, daysLeft, formatDate, formatDateShort, formatTimestamp,
     calcMatch, getMatchLevel, getMatchText,
     getCategoryIcon, getRewardWeight,
     fetchRawActivities, nodeFetchOne, browserFetchOne,
-    transformActivities, transformActivity,
+    transformActivities, transformActivity, refineDynamicCategories,
     inferCategories, inferRewardType, inferDifficulty, inferCompetition, inferSubmitZone, inferSuitableFor
   };
 
@@ -339,6 +411,8 @@
   style.textContent = `
     /* 主题变量：.baf-dark（由 JS 检测页面背景亮度/系统偏好后挂载）覆盖为深色 */
     :root {
+      --baf-panel-w: 380px;
+      --baf-top-offset: 0px; /* 由 JS 按页面顶栏实测高度设置，避免遮挡右上角用户信息 */
       --baf-bg: #fff;
       --baf-bg-subtle: #f4f5f7;
       --baf-bg-accent: #fff5f7;
@@ -375,9 +449,17 @@
          否则未声明字号的流内子元素会继承 100px，line-height:normal 撑出百像素行盒 */
       font-size: 13px; line-height: 1.5;
     }
-    .baf-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .baf-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
     .baf-title { font-size: 15px; font-weight: 700; color: #fb7299; display: flex; align-items: center; gap: 6px; }
-    .baf-stats { font-size: 12px; color: var(--baf-text-sub); }
+    .baf-header-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .baf-icon-btn {
+      width: 26px; height: 26px; border: 1px solid var(--baf-border); background: var(--baf-bg);
+      border-radius: 6px; font-size: 14px; line-height: 1; color: var(--baf-text-sub);
+      cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      padding: 0; transition: all 0.15s;
+    }
+    .baf-icon-btn:hover { border-color: #fb7299; color: #fb7299; }
+    .baf-stats { font-size: 12px; color: var(--baf-text-sub); margin-bottom: 8px; }
     .baf-stats strong { color: #fb7299; font-size: 14px; }
     .baf-filter-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
     .baf-filter-label { font-size: 12px; color: var(--baf-text-faint); font-weight: 600; min-width: 50px; flex-shrink: 0; }
@@ -403,6 +485,9 @@
     .baf-hide-original .list-scroll-box { display: none !important; }
     .baf-activity-list {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      /* 行高强制按内容计算：容器块向尺寸确定（停靠面板 flex:1）+卡片 overflow:hidden 时，
+         auto 行会被压成等分填充、容器误判无溢出，卡片内容全被裁掉 */
+      grid-auto-rows: max-content;
       gap: 12px; padding: 0 20px 20px;
       /* 同工具栏：显式声明基础字号，切断 B站 html font-size:100px 的继承污染 */
       font-size: 13px; line-height: 1.5;
@@ -453,6 +538,55 @@
     /* 匹配度徽章包裹层（同理） */
     .baf-match-wrap { margin-top: 6px; }
     .baf-empty { text-align: center; padding: 60px 20px; color: var(--baf-text-faint); grid-column: 1 / -1; }
+
+    /* ========== 右侧停靠面板模式（dock） ========== */
+    /* 面板打开时收窄页面内容区（原列表保留可浏览） */
+    body.baf-panel-open { padding-right: var(--baf-panel-w); }
+    #baf-panel {
+      position: fixed; top: var(--baf-top-offset, 0px); right: 0; bottom: 0; width: var(--baf-panel-w); max-width: 100vw;
+      z-index: 9999; background: var(--baf-bg-subtle);
+      box-shadow: -6px 0 24px rgba(0,0,0,0.15);
+      display: flex; flex-direction: column;
+      /* B站页面 html { font-size: 100px }（rem 方案），面板必须显式声明基础字号 */
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px; line-height: 1.5;
+    }
+    body:not(.baf-panel-open) #baf-panel { display: none; }
+    /* 面板内工具栏：固定头部，不再 sticky，去掉页内留白 */
+    #baf-panel .bili-activity-filter-toolbar {
+      position: static; padding: 12px 14px; margin-bottom: 0; box-shadow: none;
+      flex-shrink: 0; border-bottom: 1px solid var(--baf-border);
+    }
+    #baf-panel .baf-title { font-size: 14px; }
+    #baf-panel .baf-stats { font-size: 11px; margin-bottom: 8px; }
+    #baf-panel .baf-filter-row { margin-bottom: 6px; }
+    #baf-panel .baf-filter-label { min-width: 34px; font-size: 11px; }
+    #baf-panel .baf-filter-btn { padding: 2px 9px; font-size: 11px; }
+    /* 窄面板下的输入区：搜索独占一行，类型与排序并排补位换行 */
+    #baf-panel .baf-search-row { flex-wrap: wrap; }
+    #baf-panel .baf-search-input { flex: 1 1 100%; font-size: 12px; }
+    #baf-panel .baf-video-type-input { width: auto; flex: 1 1 150px; font-size: 11px; }
+    #baf-panel .baf-select { flex: 1 1 130px; font-size: 11px; }
+    /* 面板内列表：单列卡片、内部滚动，占满剩余高度 */
+    #baf-panel .baf-activity-list {
+      flex: 1; min-height: 0; overflow-y: auto;
+      grid-template-columns: 1fr; gap: 10px; padding: 12px 14px;
+    }
+    #baf-panel .baf-activity-item { padding: 12px; }
+    #baf-panel .baf-activity-item:hover { transform: none; }
+    #baf-panel .baf-empty { padding: 40px 16px; }
+    /* 收起面板后的右缘悬浮竖条 */
+    #baf-fab {
+      display: none; position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+      writing-mode: vertical-rl; letter-spacing: 3px; padding: 16px 8px;
+      border: none; border-radius: 8px 0 0 8px;
+      background: #fb7299; color: #fff; font-size: 13px; font-weight: 600;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      cursor: pointer; z-index: 9998;
+      box-shadow: -2px 2px 10px rgba(0,0,0,0.2);
+    }
+    body.baf-fab-show #baf-fab { display: block; }
+    #baf-fab:hover { background: #f55d8a; }
   `;
   document.head.appendChild(style);
 
@@ -461,6 +595,8 @@
   let settings = {
     videoType: '',
     favorites: [],
+    panelDocked: false,   // 是否停靠到页面右侧（dock 模式）
+    panelHidden: false,   // dock 模式下面板是否被收起（收起后显示悬浮竖条）
     filters: {
       category: 'all',
       time: 'all',
@@ -635,12 +771,17 @@
     toolbar.innerHTML = `
       <div class="baf-header">
         <div class="baf-title">🏀 B站活动筛选助手</div>
-        <div class="baf-stats">
-          共 <strong id="baf-total">0</strong> 个活动 |
-          进行中 <strong id="baf-active">0</strong> |
-          本周截止 <strong id="baf-ending">0</strong> |
-          筛选结果 <strong id="baf-result">0</strong>
+        <div class="baf-header-actions">
+          <button type="button" class="baf-icon-btn" id="baf-dock-btn" title="停靠到页面右侧">⇥</button>
+          <button type="button" class="baf-icon-btn" id="baf-undock-btn" title="恢复页面内显示">⇤</button>
+          <button type="button" class="baf-icon-btn" id="baf-close-btn" title="收起面板">✕</button>
         </div>
+      </div>
+      <div class="baf-stats">
+        共 <strong id="baf-total">0</strong> 个活动 |
+        进行中 <strong id="baf-active">0</strong> |
+        本周截止 <strong id="baf-ending">0</strong> |
+        筛选结果 <strong id="baf-result">0</strong>
       </div>
       <div class="baf-filter-row">
         <span class="baf-filter-label">分类</span>
@@ -779,6 +920,105 @@
     });
   }
 
+  // ========== 顶栏避让 ==========
+  // 右侧面板是 fixed 定位，若从 top:0 开始会盖住B站顶栏右侧的头像/大会员/消息。
+  // 实测页面顶栏高度写入 CSS 变量；找不到时保持 0（退回原行为）。
+  function updateTopOffset() {
+    let offset = 0;
+    const consider = (el) => {
+      if (!el) return;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return;
+      const r = el.getBoundingClientRect();
+      if (r.top > 4 || r.height < 40 || r.height > 120) return;
+      if (r.width < window.innerWidth * 0.6) return;
+      offset = Math.max(offset, r.bottom);
+    };
+    // B站新版 / 旧版顶栏的常见选择器
+    for (const sel of [
+      '.bili-header__bar',
+      '.bili-header-bar',
+      '#bili-header .nav-bar',
+      '.bili-header-container .bili-header-bar'
+    ]) {
+      consider(document.querySelector(sel));
+    }
+    // 兜底：扫描名字里带 header / nav 的顶部条
+    if (!offset) {
+      document.querySelectorAll('header, [class*="header"], [id*="header"], [class*="nav-bar"], [id*="nav"]')
+        .forEach(consider);
+    }
+    // 再兜底：扫描 body 下前两层的宽幅顶部横条（不依赖 class 命名）
+    if (!offset) {
+      document.querySelectorAll('body > *, body > * > *').forEach(consider);
+    }
+    document.documentElement.style.setProperty('--baf-top-offset', Math.round(offset) + 'px');
+  }
+
+  // ========== 布局切换（页面内 / 右侧停靠） ==========
+  // 停靠模式：工具栏+列表搬进 fixed 右侧面板，body 加 padding-right 收窄页面；
+  // 同时不再隐藏B站原列表（baf-hide-original），左边照常浏览、右边筛选。
+  function applyLayout() {
+    updateTopOffset();
+    const toolbar = document.getElementById('baf-toolbar');
+    const list = document.getElementById('baf-activity-list');
+    if (!toolbar || !list) return;
+
+    const dockedOpen = !!settings.panelDocked && !settings.panelHidden;
+
+    // 头部按钮按模式显隐：⇥ 仅页面内模式显示；⇤ / ✕ 仅停靠模式显示
+    const dockBtn = document.getElementById('baf-dock-btn');
+    const undockBtn = document.getElementById('baf-undock-btn');
+    const closeBtn = document.getElementById('baf-close-btn');
+    if (dockBtn) dockBtn.style.display = settings.panelDocked ? 'none' : '';
+    if (undockBtn) undockBtn.style.display = settings.panelDocked ? '' : 'none';
+    if (closeBtn) closeBtn.style.display = settings.panelDocked ? '' : 'none';
+
+    if (settings.panelDocked) {
+      let panel = document.getElementById('baf-panel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'baf-panel';
+        panel.className = 'baf-panel';
+        document.body.appendChild(panel);
+      }
+      panel.appendChild(toolbar);
+      panel.appendChild(list);
+      document.body.classList.remove('baf-hide-original');
+    } else {
+      const panel = document.getElementById('baf-panel');
+      if (panel) panel.remove();
+      const container = findActivityContainer();
+      if (container) container.insertBefore(toolbar, container.firstChild);
+      else document.body.appendChild(toolbar);
+      toolbar.parentNode.insertBefore(list, toolbar.nextSibling);
+      document.body.classList.add('baf-hide-original');
+    }
+
+    document.body.classList.toggle('baf-panel-open', dockedOpen);
+    renderFab();
+  }
+
+  // 收起面板后的右侧悬浮竖条：点击重新展开
+  function renderFab() {
+    let fab = document.getElementById('baf-fab');
+    if (!fab) {
+      fab = document.createElement('button');
+      fab.type = 'button';
+      fab.id = 'baf-fab';
+      fab.className = 'baf-fab';
+      fab.title = '打开活动筛选面板';
+      fab.textContent = '筛选助手';
+      fab.addEventListener('click', () => {
+        settings.panelHidden = false;
+        saveSettings();
+        applyLayout();
+      });
+      document.body.appendChild(fab);
+    }
+    document.body.classList.toggle('baf-fab-show', !!settings.panelDocked && !!settings.panelHidden);
+  }
+
   // ========== 事件绑定 ==========
   const debouncedRender = debounce(() => renderActivityList());
 
@@ -829,6 +1069,25 @@
       saveSettings();
       renderActivityList();
     });
+
+    // 布局开关：停靠到右侧 / 恢复页面内 / 收起面板
+    document.getElementById('baf-dock-btn').addEventListener('click', () => {
+      settings.panelDocked = true;
+      settings.panelHidden = false;
+      saveSettings();
+      applyLayout();
+    });
+    document.getElementById('baf-undock-btn').addEventListener('click', () => {
+      settings.panelDocked = false;
+      settings.panelHidden = false;
+      saveSettings();
+      applyLayout();
+    });
+    document.getElementById('baf-close-btn').addEventListener('click', () => {
+      settings.panelHidden = true;
+      saveSettings();
+      applyLayout();
+    });
   }
 
   // ========== 初始化 ==========
@@ -840,6 +1099,9 @@
     const themeObserver = new MutationObserver(applyDarkMode);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     if (document.body) themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+    // 窗口尺寸变化时重新测量顶栏高度，保持面板不遮挡顶部信息
+    window.addEventListener('resize', debounce(updateTopOffset, 150));
 
     const loading = document.createElement('div');
     loading.id = 'baf-loading';
@@ -873,7 +1135,7 @@
 
     renderToolbar();
     renderActivityList();
-    document.body.classList.add('baf-hide-original');
+    applyLayout();
   }
 
   // 等待页面加载完成

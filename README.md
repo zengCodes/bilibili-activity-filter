@@ -12,6 +12,8 @@
 - **多种排序**：按截止时间、匹配度、奖励丰厚程度排序
 - **活动详情**：点击卡片查看投稿指引、奖励说明、适合的视频类型
 - **即将截止提醒**：剩余7天内的活动自动标记"即将截止"
+- **右侧停靠面板（扩展 / 油猴脚本）**：把工具栏和活动列表停靠到页面右侧，保留B站原列表，左边浏览右边筛选；收起后悬浮按钮唤回，布局自动记忆并避开B站顶栏
+- **分类自适应**：接口只给标签不给分类，内置规则表推断分类；新领域活动成批出现时按标签聚类自动生成分类按钮
 - **离线fallback**：后端未启动时自动使用本地缓存数据
 
 ## 快速开始
@@ -59,6 +61,8 @@ bilibili-activity-filter/
 ├── scripts/                           # 构建与数据脚本
 │   ├── build.js                       # 同步 core.js 到三端 + 内联生成油猴脚本
 │   └── update-data.js                 # 抓取B站最新活动 → 生成 public/data.js
+├── debug/                             # 本地回归页
+│   └── panel-repro.html               # 复刻B站环境，验证停靠面板卡片高度与滚动
 ├── bilibili-activity-filter.user.js   # 油猴脚本（构建产物，勿直接编辑）
 ├── server.js                          # Node.js后端代理服务
 ├── package.json                       # 依赖配置
@@ -72,6 +76,7 @@ bilibili-activity-filter/
 ```bash
 npm run build        # 修改 core.js 或 user.src.js 后运行：同步到 public/、extension/ 并生成油猴脚本
 npm run update-data  # 抓取B站最新活动，更新离线fallback数据（发布/提交前运行）
+npm run pack         # 校验三端版本一致并打包扩展（zip 不入库）
 npm start            # 启动服务（prestart 自动先 build）
 ```
 
@@ -91,7 +96,7 @@ B站活动API：`https://api.bilibili.com/x/activity_components/video_activity/h
 
 后端自动分页获取全部活动（每页50条，共4页），并进行数据清洗和格式转换：
 - Unix时间戳 → 可读日期
-- 标签 → 自动推断分类、奖励类型、参赛门槛
+- 标签 → 按规则表推断分类（未命中的做标签聚类自适应）、奖励类型、参赛门槛
 - 活动名称 → 自动推断适合的视频类型
 
 ## 筛选技巧

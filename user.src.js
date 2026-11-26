@@ -22,6 +22,8 @@
   style.textContent = `
     /* 主题变量：.baf-dark（由 JS 检测页面背景亮度/系统偏好后挂载）覆盖为深色 */
     :root {
+      --baf-panel-w: 380px;
+      --baf-top-offset: 0px; /* 由 JS 按页面顶栏实测高度设置，避免遮挡右上角用户信息 */
       --baf-bg: #fff;
       --baf-bg-subtle: #f4f5f7;
       --baf-bg-accent: #fff5f7;
@@ -58,9 +60,17 @@
          否则未声明字号的流内子元素会继承 100px，line-height:normal 撑出百像素行盒 */
       font-size: 13px; line-height: 1.5;
     }
-    .baf-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .baf-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
     .baf-title { font-size: 15px; font-weight: 700; color: #fb7299; display: flex; align-items: center; gap: 6px; }
-    .baf-stats { font-size: 12px; color: var(--baf-text-sub); }
+    .baf-header-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .baf-icon-btn {
+      width: 26px; height: 26px; border: 1px solid var(--baf-border); background: var(--baf-bg);
+      border-radius: 6px; font-size: 14px; line-height: 1; color: var(--baf-text-sub);
+      cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      padding: 0; transition: all 0.15s;
+    }
+    .baf-icon-btn:hover { border-color: #fb7299; color: #fb7299; }
+    .baf-stats { font-size: 12px; color: var(--baf-text-sub); margin-bottom: 8px; }
     .baf-stats strong { color: #fb7299; font-size: 14px; }
     .baf-filter-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
     .baf-filter-label { font-size: 12px; color: var(--baf-text-faint); font-weight: 600; min-width: 50px; flex-shrink: 0; }
@@ -86,6 +96,9 @@
     .baf-hide-original .list-scroll-box { display: none !important; }
     .baf-activity-list {
       display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      /* 行高强制按内容计算：容器块向尺寸确定（停靠面板 flex:1）+卡片 overflow:hidden 时，
+         auto 行会被压成等分填充、容器误判无溢出，卡片内容全被裁掉 */
+      grid-auto-rows: max-content;
       gap: 12px; padding: 0 20px 20px;
       /* 同工具栏：显式声明基础字号，切断 B站 html font-size:100px 的继承污染 */
       font-size: 13px; line-height: 1.5;
@@ -136,6 +149,55 @@
     /* 匹配度徽章包裹层（同理） */
     .baf-match-wrap { margin-top: 6px; }
     .baf-empty { text-align: center; padding: 60px 20px; color: var(--baf-text-faint); grid-column: 1 / -1; }
+
+    /* ========== 右侧停靠面板模式（dock） ========== */
+    /* 面板打开时收窄页面内容区（原列表保留可浏览） */
+    body.baf-panel-open { padding-right: var(--baf-panel-w); }
+    #baf-panel {
+      position: fixed; top: var(--baf-top-offset, 0px); right: 0; bottom: 0; width: var(--baf-panel-w); max-width: 100vw;
+      z-index: 9999; background: var(--baf-bg-subtle);
+      box-shadow: -6px 0 24px rgba(0,0,0,0.15);
+      display: flex; flex-direction: column;
+      /* B站页面 html { font-size: 100px }（rem 方案），面板必须显式声明基础字号 */
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 13px; line-height: 1.5;
+    }
+    body:not(.baf-panel-open) #baf-panel { display: none; }
+    /* 面板内工具栏：固定头部，不再 sticky，去掉页内留白 */
+    #baf-panel .bili-activity-filter-toolbar {
+      position: static; padding: 12px 14px; margin-bottom: 0; box-shadow: none;
+      flex-shrink: 0; border-bottom: 1px solid var(--baf-border);
+    }
+    #baf-panel .baf-title { font-size: 14px; }
+    #baf-panel .baf-stats { font-size: 11px; margin-bottom: 8px; }
+    #baf-panel .baf-filter-row { margin-bottom: 6px; }
+    #baf-panel .baf-filter-label { min-width: 34px; font-size: 11px; }
+    #baf-panel .baf-filter-btn { padding: 2px 9px; font-size: 11px; }
+    /* 窄面板下的输入区：搜索独占一行，类型与排序并排补位换行 */
+    #baf-panel .baf-search-row { flex-wrap: wrap; }
+    #baf-panel .baf-search-input { flex: 1 1 100%; font-size: 12px; }
+    #baf-panel .baf-video-type-input { width: auto; flex: 1 1 150px; font-size: 11px; }
+    #baf-panel .baf-select { flex: 1 1 130px; font-size: 11px; }
+    /* 面板内列表：单列卡片、内部滚动，占满剩余高度 */
+    #baf-panel .baf-activity-list {
+      flex: 1; min-height: 0; overflow-y: auto;
+      grid-template-columns: 1fr; gap: 10px; padding: 12px 14px;
+    }
+    #baf-panel .baf-activity-item { padding: 12px; }
+    #baf-panel .baf-activity-item:hover { transform: none; }
+    #baf-panel .baf-empty { padding: 40px 16px; }
+    /* 收起面板后的右缘悬浮竖条 */
+    #baf-fab {
+      display: none; position: fixed; right: 0; top: 50%; transform: translateY(-50%);
+      writing-mode: vertical-rl; letter-spacing: 3px; padding: 16px 8px;
+      border: none; border-radius: 8px 0 0 8px;
+      background: #fb7299; color: #fff; font-size: 13px; font-weight: 600;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      cursor: pointer; z-index: 9998;
+      box-shadow: -2px 2px 10px rgba(0,0,0,0.2);
+    }
+    body.baf-fab-show #baf-fab { display: block; }
+    #baf-fab:hover { background: #f55d8a; }
   `;
   document.head.appendChild(style);
 
@@ -144,6 +206,8 @@
   let settings = {
     videoType: '',
     favorites: [],
+    panelDocked: false,   // 是否停靠到页面右侧（dock 模式）
+    panelHidden: false,   // dock 模式下面板是否被收起（收起后显示悬浮竖条）
     filters: {
       category: 'all',
       time: 'all',
@@ -318,12 +382,17 @@
     toolbar.innerHTML = `
       <div class="baf-header">
         <div class="baf-title">🏀 B站活动筛选助手</div>
-        <div class="baf-stats">
-          共 <strong id="baf-total">0</strong> 个活动 |
-          进行中 <strong id="baf-active">0</strong> |
-          本周截止 <strong id="baf-ending">0</strong> |
-          筛选结果 <strong id="baf-result">0</strong>
+        <div class="baf-header-actions">
+          <button type="button" class="baf-icon-btn" id="baf-dock-btn" title="停靠到页面右侧">⇥</button>
+          <button type="button" class="baf-icon-btn" id="baf-undock-btn" title="恢复页面内显示">⇤</button>
+          <button type="button" class="baf-icon-btn" id="baf-close-btn" title="收起面板">✕</button>
         </div>
+      </div>
+      <div class="baf-stats">
+        共 <strong id="baf-total">0</strong> 个活动 |
+        进行中 <strong id="baf-active">0</strong> |
+        本周截止 <strong id="baf-ending">0</strong> |
+        筛选结果 <strong id="baf-result">0</strong>
       </div>
       <div class="baf-filter-row">
         <span class="baf-filter-label">分类</span>
@@ -462,6 +531,105 @@
     });
   }
 
+  // ========== 顶栏避让 ==========
+  // 右侧面板是 fixed 定位，若从 top:0 开始会盖住B站顶栏右侧的头像/大会员/消息。
+  // 实测页面顶栏高度写入 CSS 变量；找不到时保持 0（退回原行为）。
+  function updateTopOffset() {
+    let offset = 0;
+    const consider = (el) => {
+      if (!el) return;
+      const cs = getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden') return;
+      const r = el.getBoundingClientRect();
+      if (r.top > 4 || r.height < 40 || r.height > 120) return;
+      if (r.width < window.innerWidth * 0.6) return;
+      offset = Math.max(offset, r.bottom);
+    };
+    // B站新版 / 旧版顶栏的常见选择器
+    for (const sel of [
+      '.bili-header__bar',
+      '.bili-header-bar',
+      '#bili-header .nav-bar',
+      '.bili-header-container .bili-header-bar'
+    ]) {
+      consider(document.querySelector(sel));
+    }
+    // 兜底：扫描名字里带 header / nav 的顶部条
+    if (!offset) {
+      document.querySelectorAll('header, [class*="header"], [id*="header"], [class*="nav-bar"], [id*="nav"]')
+        .forEach(consider);
+    }
+    // 再兜底：扫描 body 下前两层的宽幅顶部横条（不依赖 class 命名）
+    if (!offset) {
+      document.querySelectorAll('body > *, body > * > *').forEach(consider);
+    }
+    document.documentElement.style.setProperty('--baf-top-offset', Math.round(offset) + 'px');
+  }
+
+  // ========== 布局切换（页面内 / 右侧停靠） ==========
+  // 停靠模式：工具栏+列表搬进 fixed 右侧面板，body 加 padding-right 收窄页面；
+  // 同时不再隐藏B站原列表（baf-hide-original），左边照常浏览、右边筛选。
+  function applyLayout() {
+    updateTopOffset();
+    const toolbar = document.getElementById('baf-toolbar');
+    const list = document.getElementById('baf-activity-list');
+    if (!toolbar || !list) return;
+
+    const dockedOpen = !!settings.panelDocked && !settings.panelHidden;
+
+    // 头部按钮按模式显隐：⇥ 仅页面内模式显示；⇤ / ✕ 仅停靠模式显示
+    const dockBtn = document.getElementById('baf-dock-btn');
+    const undockBtn = document.getElementById('baf-undock-btn');
+    const closeBtn = document.getElementById('baf-close-btn');
+    if (dockBtn) dockBtn.style.display = settings.panelDocked ? 'none' : '';
+    if (undockBtn) undockBtn.style.display = settings.panelDocked ? '' : 'none';
+    if (closeBtn) closeBtn.style.display = settings.panelDocked ? '' : 'none';
+
+    if (settings.panelDocked) {
+      let panel = document.getElementById('baf-panel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'baf-panel';
+        panel.className = 'baf-panel';
+        document.body.appendChild(panel);
+      }
+      panel.appendChild(toolbar);
+      panel.appendChild(list);
+      document.body.classList.remove('baf-hide-original');
+    } else {
+      const panel = document.getElementById('baf-panel');
+      if (panel) panel.remove();
+      const container = findActivityContainer();
+      if (container) container.insertBefore(toolbar, container.firstChild);
+      else document.body.appendChild(toolbar);
+      toolbar.parentNode.insertBefore(list, toolbar.nextSibling);
+      document.body.classList.add('baf-hide-original');
+    }
+
+    document.body.classList.toggle('baf-panel-open', dockedOpen);
+    renderFab();
+  }
+
+  // 收起面板后的右侧悬浮竖条：点击重新展开
+  function renderFab() {
+    let fab = document.getElementById('baf-fab');
+    if (!fab) {
+      fab = document.createElement('button');
+      fab.type = 'button';
+      fab.id = 'baf-fab';
+      fab.className = 'baf-fab';
+      fab.title = '打开活动筛选面板';
+      fab.textContent = '筛选助手';
+      fab.addEventListener('click', () => {
+        settings.panelHidden = false;
+        saveSettings();
+        applyLayout();
+      });
+      document.body.appendChild(fab);
+    }
+    document.body.classList.toggle('baf-fab-show', !!settings.panelDocked && !!settings.panelHidden);
+  }
+
   // ========== 事件绑定 ==========
   const debouncedRender = debounce(() => renderActivityList());
 
@@ -512,6 +680,25 @@
       saveSettings();
       renderActivityList();
     });
+
+    // 布局开关：停靠到右侧 / 恢复页面内 / 收起面板
+    document.getElementById('baf-dock-btn').addEventListener('click', () => {
+      settings.panelDocked = true;
+      settings.panelHidden = false;
+      saveSettings();
+      applyLayout();
+    });
+    document.getElementById('baf-undock-btn').addEventListener('click', () => {
+      settings.panelDocked = false;
+      settings.panelHidden = false;
+      saveSettings();
+      applyLayout();
+    });
+    document.getElementById('baf-close-btn').addEventListener('click', () => {
+      settings.panelHidden = true;
+      saveSettings();
+      applyLayout();
+    });
   }
 
   // ========== 初始化 ==========
@@ -523,6 +710,9 @@
     const themeObserver = new MutationObserver(applyDarkMode);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     if (document.body) themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+    // 窗口尺寸变化时重新测量顶栏高度，保持面板不遮挡顶部信息
+    window.addEventListener('resize', debounce(updateTopOffset, 150));
 
     const loading = document.createElement('div');
     loading.id = 'baf-loading';
@@ -556,7 +746,7 @@
 
     renderToolbar();
     renderActivityList();
-    document.body.classList.add('baf-hide-original');
+    applyLayout();
   }
 
   // 等待页面加载完成

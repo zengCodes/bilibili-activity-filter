@@ -17,6 +17,29 @@
   const PAGE_SIZE = 50;
   const WEB_LOCATION = '888.139379'; // B站活动中心页面的固定跟踪参数
 
+  /**
+   * 分类规则表：B站接口不给分类，只能靠标题+标签推断。
+   * 维护说明：新增/调整分类只改这张表 —— patterns 中任一关键词命中（不区分大小写）
+   * 即归入该分类；数组顺序即主分类优先级（第一个命中的为主分类）。
+   * 未命中任何规则的条目由 transformActivities 的动态聚类兜底（见 DYNAMIC_CATEGORY_THRESHOLD）。
+   */
+  const CATEGORY_RULES = [
+    { name: '游戏', patterns: ['游戏', '手游', '端游', '攻略', 'FPS', '射击', 'MOBA', '原神', '崩坏', '星穹', '鸣潮', '永劫', '阴阳师', '蛋仔', '暗区', '三角洲', '火影', '逆水寒', '异环', '重返未来', '游戏王', 'P5X', '物华弥新', '遗忘之海', '蔚蓝档案', '无限暖暖', 'APEX', 'LOL', '光遇', '战双', '绝区零', '明日方舟', '第五人格', '和平精英', '王者荣耀', '无畏契约', '瓦罗兰特'] },
+    { name: '动画', patterns: ['动画', '番剧', '国创', '动漫', '鬼畜', '黄绿合战', '同人', 'Bonly', 'cosplay', '绘画', '手书', 'up动画', '动画剧场', '手搓动画', '3d动画', 'MAD', 'AMV', 'EVA', 'RE0', 're0', '凡人修仙', '雪王动画', '动漫二创', '二创'] },
+    { name: '影视', patterns: ['影视', '电影', '电视剧', '漫威', '复联', '解说', '盘点', '短片', 'AI影视', '影视解说'] },
+    { name: '音乐', patterns: ['音乐', 'MV', '原创音乐', '唱歌', '编曲', 'Vsinger', '洛天依', '宅舞', '舞蹈', '直拍', '饭拍', '演唱会', 'live现场', '音乐现场', '音乐MV', '音mad', '鬼畜调教'] },
+    { name: '知识', patterns: ['知识', '科普', '科学', '历史', '人文', '诺贝尔', '长视频'] },
+    { name: '美食', patterns: ['美食', '料理', '做饭', '烘焙', '探店'] },
+    { name: '亲子', patterns: ['亲子', '家庭', '育儿', '宝宝'] },
+    { name: '科技', patterns: ['科技', '数码', '测评', '汽车', '方程豹', '海尔', '品牌合作'] },
+    { name: '综合', patterns: ['vlog', '生活', '日常', '旅行', '跨文化', '外国人', '播客', '单口', '开麦', '手工', 'DIY', '赛车', '体育', '赛事', '直播', '切片', '主播', '二次元'] }
+  ];
+  // 规则全部未命中时的兜底分类
+  const FALLBACK_CATEGORY = '综合';
+  // 动态聚类阈值：同一标签出现在 ≥N 个未命中规则的活动中时，升格为一个动态分类
+  //（自适应B站新增领域，如新开"体育"类活动，各活动都带"体育"标签即可自动出现分类按钮）
+  const DYNAMIC_CATEGORY_THRESHOLD = 3;
+
   // ========== 通用工具 ==========
   // HTML 转义：所有来自B站API的字符串插入模板前必须经过此函数
   function esc(s) {
@@ -190,8 +213,60 @@
   }
 
   // ========== 数据转换与推断 ==========
+  /**
+   * 两遍转换：
+   * 第一遍 transformActivity —— 按 CATEGORY_RULES 推断分类，未命中规则的条目
+   *   先挂兜底分类并打 _unclassified 标记；
+   * 第二遍 refineDynamicCategories —— 在未命中规则的条目里做标签聚类，
+   *   高频标签（≥DYNAMIC_CATEGORY_THRESHOLD）升格为动态分类，实现自适应B站新增领域。
+   */
   function transformActivities(items) {
-    return items.map((item, index) => transformActivity(item, index));
+    const list = items.map((item, index) => transformActivity(item, index));
+    refineDynamicCategories(list);
+    return list;
+  }
+
+  /**
+   * 动态聚类兜底：统计未命中规则活动的标签频次，高频标签升格为分类。
+   * 例如B站新开"体育"类活动而规则表尚未收录，各活动都带"体育"标签，
+   * 会自动生成"体育"分类按钮；孤立的条目才落入 FALLBACK_CATEGORY。
+   */
+  function refineDynamicCategories(list) {
+    const unmatched = list.filter(a => a._unclassified);
+    if (unmatched.length === 0) return list;
+
+    const freq = new Map();
+    unmatched.forEach(a => (a.tags || []).forEach(t => {
+      const key = String(t).trim();
+      if (!key) return;
+      freq.set(key, (freq.get(key) || 0) + 1);
+    }));
+
+    const dynamicCats = new Map(
+      Array.from(freq.entries())
+        .filter(([, n]) => n >= DYNAMIC_CATEGORY_THRESHOLD)
+        .sort((x, y) => y[1] - x[1])
+    );
+
+    unmatched.forEach(a => {
+      const hits = (a.tags || [])
+        .map(t => String(t).trim())
+        .filter(t => dynamicCats.has(t))
+        .sort((x, y) => dynamicCats.get(y) - dynamicCats.get(x));
+      a.categories = hits.length ? hits : [FALLBACK_CATEGORY];
+      a.category = a.categories[0];
+
+      // 主分类变了，依赖它的字段一并重算
+      const text = ((a.tags || []).join('') + a.title).toLowerCase();
+      a.submitZone = inferSubmitZone(a.category);
+      a.difficulty = inferDifficulty(text, a.category);
+      a.competition = inferCompetition(a.category, a.tags);
+      a.suitableFor = inferSuitableFor(text, a.category);
+      delete a._unclassified;
+    });
+
+    // 清理规则命中条目上的标记位，保证输出对象干净
+    list.forEach(a => { if ('_unclassified' in a) delete a._unclassified; });
   }
 
   function transformActivity(item, index) {
@@ -199,7 +274,8 @@
     const name = item.name || '';
     const text = (labels.join('') + name).toLowerCase();
 
-    const categories = inferCategories(text);
+    const ruleCats = inferCategories(text);
+    const categories = ruleCats.length ? ruleCats : [FALLBACK_CATEGORY];
     const primaryCategory = categories[0];
 
     return {
@@ -207,6 +283,7 @@
       title: name,
       category: primaryCategory,        // 主分类（用于卡片显示）
       categories: categories,           // 所有分类（用于多分类筛选）
+      _unclassified: ruleCats.length === 0,  // 规则未命中标记，供动态聚类二次处理
       tags: labels,
       startDate: item.stime ? formatTimestamp(item.stime) : '',
       endDate: item.etime ? formatTimestamp(item.etime) : '',
@@ -227,21 +304,15 @@
   }
 
   /**
-   * 从标签和名称推断活动分类（支持多分类）
-   * 返回数组，第一个元素为主分类
+   * 按 CATEGORY_RULES 推断活动分类（支持多分类，第一个元素为主分类）。
+   * 全部未命中时返回空数组，由调用方走动态聚类/兜底分类。
    */
   function inferCategories(text) {
+    const t = String(text || '').toLowerCase();
     const cats = [];
-    if (/游戏|手游|端游|攻略|FPS|射击|MOBA|原神|崩坏|星穹|鸣潮|永劫|阴阳师|蛋仔|暗区|三角洲|火影|逆水寒|异环|重返未来|游戏王|P5X|物华弥新|遗忘之海|蔚蓝档案|无限暖暖|APEX|LOL|光遇|战双|绝区零|明日方舟|第五人格|和平精英|王者荣耀|无畏契约|瓦罗兰特/.test(text)) cats.push('游戏');
-    if (/动画|番剧|国创|动漫|鬼畜|黄绿合战|同人|Bonly|cosplay|绘画|手书|up动画|动画剧场|手搓动画|3d动画|MAD|AMV|EVA|RE0|re0|凡人修仙|雪王动画|动漫二创|二创/.test(text)) cats.push('动画');
-    if (/影视|电影|电视剧|漫威|复联|解说|盘点|短片|AI影视|影视解说/.test(text)) cats.push('影视');
-    if (/音乐|MV|原创音乐|唱歌|编曲|Vsinger|洛天依|宅舞|舞蹈|直拍|饭拍|演唱会|live现场|音乐现场|音乐MV|音mad|鬼畜调教/.test(text)) cats.push('音乐');
-    if (/知识|科普|科学|历史|人文|诺贝尔|长视频/.test(text)) cats.push('知识');
-    if (/美食|料理|做饭|烘焙|探店/.test(text)) cats.push('美食');
-    if (/亲子|家庭|育儿|宝宝/.test(text)) cats.push('亲子');
-    if (/科技|数码|测评|汽车|方程豹|海尔|品牌合作/.test(text)) cats.push('科技');
-    if (/vlog|生活|日常|旅行|跨文化|外国人|播客|单口|开麦|手工|DIY|赛车|体育|赛事|直播|切片|主播|二次元/.test(text)) cats.push('综合');
-    if (cats.length === 0) cats.push('综合');
+    for (const rule of CATEGORY_RULES) {
+      if (rule.patterns.some(p => t.includes(p.toLowerCase()))) cats.push(rule.name);
+    }
     return cats;
   }
 
@@ -302,11 +373,12 @@
   // ========== 导出 ==========
   const BAFCore = {
     API_URL, PAGE_SIZE, WEB_LOCATION,
+    CATEGORY_RULES, FALLBACK_CATEGORY, DYNAMIC_CATEGORY_THRESHOLD,
     esc, today, debounce, daysLeft, formatDate, formatDateShort, formatTimestamp,
     calcMatch, getMatchLevel, getMatchText,
     getCategoryIcon, getRewardWeight,
     fetchRawActivities, nodeFetchOne, browserFetchOne,
-    transformActivities, transformActivity,
+    transformActivities, transformActivity, refineDynamicCategories,
     inferCategories, inferRewardType, inferDifficulty, inferCompetition, inferSubmitZone, inferSuitableFor
   };
 
