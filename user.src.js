@@ -8,6 +8,8 @@
 // @author       zengCodes
 // @match        https://www.bilibili.com/blackboard/era/reward-activity-list-page.html*
 // @grant        none
+// @updateURL    https://testingcf.jsdelivr.net/gh/zengCodes/bilibili-activity-filter@main/bilibili-activity-filter.user.js
+// @downloadURL  https://testingcf.jsdelivr.net/gh/zengCodes/bilibili-activity-filter@main/bilibili-activity-filter.user.js
 // @tag          哔哩哔哩
 // @tag          B站增强
 // @tag          筛选功能
