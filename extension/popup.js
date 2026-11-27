@@ -9,16 +9,25 @@ const { esc, debounce, daysLeft, formatDateShort, calcMatch, getMatchLevel } = B
 
 // 加载设置
 async function loadSettings() {
-  const result = await chrome.storage.sync.get(['videoType', 'savedActivities']);
-  if (result.videoType) {
-    document.getElementById('videoType').value = result.videoType;
+  try {
+    const result = await chrome.storage.sync.get(['videoType', 'savedActivities']);
+    if (result.videoType) {
+      document.getElementById('videoType').value = result.videoType;
+    }
+    renderFavList(result.savedActivities || []);
+  } catch (err) {
+    // 读失败不能退化成"暂无收藏"，否则和"真的没收藏"分不清
+    console.warn('[B站活动筛选助手] 读取收藏失败:', err);
+    document.getElementById('favCount').textContent = '';
+    document.getElementById('favList').innerHTML = '<div class="empty">收藏读取失败，请关掉弹窗重开</div>';
   }
-  renderFavList(result.savedActivities || []);
 }
 
 // 渲染收藏列表（数据来自活动页卡片的 ☆ 收藏，含 id/title/url/endDate 精简信息）
 function renderFavList(saved) {
   const container = document.getElementById('favList');
+  const countEl = document.getElementById('favCount');
+  if (countEl) countEl.textContent = saved.length ? `（${saved.length}）` : '';
   if (!saved.length) {
     container.innerHTML = '<div class="empty">暂无收藏，在活动页点击卡片右上角 ☆ 即可收藏</div>';
     return;
@@ -148,6 +157,12 @@ document.getElementById('videoType').addEventListener('input', () => {
 
 document.getElementById('openPageBtn').addEventListener('click', () => {
   chrome.tabs.create({ url: 'https://www.bilibili.com/blackboard/era/reward-activity-list-page.html#/list' });
+});
+
+// 收藏变化实时同步：活动页点星标后，已打开的弹窗无需重开也能看到
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'sync' || !changes.savedActivities) return;
+  renderFavList(changes.savedActivities.newValue || []);
 });
 
 // 初始化

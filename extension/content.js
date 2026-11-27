@@ -32,19 +32,80 @@
     favMap = new Map((settings.savedActivities || []).map(f => [f.id, f]));
   }
 
+  // 扩展被更新/重载后，本页里旧的内容脚本会"失联"：DOM 还在、还能正常渲染，
+  // 但所有 chrome.* 调用都会抛 "Extension context invalidated"。此时若只改内存、
+  // 不校验落盘，就会出现"卡片星标亮着、弹窗里收藏空白"——用户看不到任何报错。
+  function contextAlive() {
+    try { return !!(chrome.runtime && chrome.runtime.id); } catch (e) { return false; }
+  }
+
+  // 收藏落盘：Promise 化，便于失败回滚（原来 fire-and-forget 会静默丢数据）
+  async function persistFavorites(list) {
+    if (!contextAlive()) throw new Error('Extension context invalidated');
+    await chrome.storage.sync.set({ savedActivities: list });
+  }
+
   async function toggleFav(id) {
-    const list = settings.savedActivities || [];
-    const idx = list.findIndex(f => f.id === id);
-    if (idx >= 0) {
-      list.splice(idx, 1);
+    const prev = Array.isArray(settings.savedActivities) ? settings.savedActivities : [];
+    const exists = prev.some(f => f.id === id);
+    let next;
+    if (exists) {
+      next = prev.filter(f => f.id !== id);
     } else {
       const a = activities.find(x => x.id === id);
-      if (a) list.push({ id: a.id, title: a.title, url: a.url, endDate: a.endDate });
+      if (!a) return;
+      next = prev.concat([{ id: a.id, title: a.title, url: a.url, endDate: a.endDate }]);
     }
-    settings.savedActivities = list;
+
+    // 先乐观更新，点击有即时反馈
+    settings.savedActivities = next;
     refreshFavMap();
-    saveSettings();
     renderActivityList();
+
+    try {
+      await persistFavorites(next);
+    } catch (err) {
+      // 写失败就把星标退回去，别让界面撒谎
+      settings.savedActivities = prev;
+      refreshFavMap();
+      renderActivityList();
+      const invalidated = !contextAlive() || /context invalidated/i.test(err && err.message || '');
+      if (invalidated) {
+        notifyContextLost();
+      } else if (/quota/i.test(err && err.message || '')) {
+        showToast('收藏保存失败：同步存储空间已满', 'error');
+      } else {
+        showToast('收藏保存失败：' + ((err && err.message) || '未知错误'), 'error');
+      }
+      console.warn('[B站活动筛选助手] 收藏保存失败:', err);
+    }
+  }
+
+  // ========== 轻提示 / 失联横幅 ==========
+  let toastTimer = null;
+  function showToast(text, type) {
+    if (!document.body) return;
+    let el = document.getElementById('baf-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'baf-toast';
+      document.body.appendChild(el);
+    }
+    el.className = 'baf-toast show' + (type === 'error' ? ' baf-toast-error' : '');
+    el.textContent = text;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.className = 'baf-toast'; }, 3200);
+  }
+
+  let contextLostShown = false;
+  function notifyContextLost() {
+    if (contextLostShown || !document.body) return;
+    contextLostShown = true;
+    const bar = document.createElement('div');
+    bar.className = 'baf-reload-bar';
+    bar.innerHTML = '<span>扩展刚刚更新，当前页面的筛选与收藏都存不下来。刷新一下就好。</span><button type="button">刷新页面</button>';
+    bar.querySelector('button').addEventListener('click', () => location.reload());
+    document.body.appendChild(bar);
   }
 
   // ========== 暗色模式检测 ==========
@@ -214,7 +275,9 @@
           <span class="baf-filter-btn ${settings.filters.time === 'month' ? 'active' : ''}" data-time="month">本月截止</span>
           <span class="baf-filter-btn ${settings.filters.time === 'long' ? 'active' : ''}" data-time="long">长期</span>
         </div>
-        <span class="baf-filter-label" style="margin-left:16px;">奖励</span>
+      </div>
+      <div class="baf-filter-row">
+        <span class="baf-filter-label">奖励</span>
         <div class="baf-filter-btns" id="baf-reward-btns">
           <span class="baf-filter-btn ${settings.filters.reward === 'all' ? 'active' : ''}" data-reward="all">全部</span>
           <span class="baf-filter-btn ${settings.filters.reward === '现金瓜分' ? 'active' : ''}" data-reward="现金瓜分">现金瓜分</span>
@@ -544,7 +607,13 @@
   }
 
   function saveSettings() {
-    chrome.runtime.sendMessage({ type: 'SAVE_SETTINGS', payload: settings });
+    if (!contextAlive()) { notifyContextLost(); return; }
+    try {
+      const p = chrome.runtime.sendMessage({ type: 'SAVE_SETTINGS', payload: settings });
+      if (p && p.catch) p.catch(() => notifyContextLost());
+    } catch (e) {
+      notifyContextLost();
+    }
   }
 
   // ========== 初始化 ==========
@@ -556,6 +625,18 @@
     const themeObserver = new MutationObserver(applyDarkMode);
     themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     if (document.body) themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+    // 收藏以存储为准：其他标签页/弹窗改动后，本页星标与"收藏优先"排序跟着刷新
+    if (contextAlive() && chrome.storage && chrome.storage.onChanged) {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area !== 'sync' || !changes.savedActivities) return;
+        const next = changes.savedActivities.newValue || [];
+        if (JSON.stringify(next) === JSON.stringify(settings.savedActivities || [])) return;
+        settings.savedActivities = next;
+        refreshFavMap();
+        if (activities.length) renderActivityList();
+      });
+    }
 
     // 窗口尺寸变化时重新测量顶栏高度，保持面板不遮挡顶部信息
     window.addEventListener('resize', debounce(updateTopOffset, 150));

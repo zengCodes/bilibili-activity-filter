@@ -93,9 +93,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.type === 'SAVE_SETTINGS') {
-    chrome.storage.sync.set(request.payload).then(() => {
-      sendResponse({ success: true });
-    });
+    // 写失败要回传，别让调用方以为存上了（sync 有 8KB/项上限，收藏多了会超）
+    chrome.storage.sync.set(request.payload)
+      .then(() => sendResponse({ success: true }))
+      .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
 });

@@ -562,3 +562,63 @@ body:not(.baf-panel-open) #baf-panel { display: none; }
 }
 body.baf-fab-show #baf-fab { display: block; }
 #baf-fab:hover { background: #f55d8a; }
+
+/* ===== 轻提示（操作反馈） =====
+   B站页面 html 字号被设为 100px（rem 方案），这里必须显式声明字号与行高，
+   否则 toast 会被撑成巨字。 */
+.baf-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 40px;
+  transform: translate(-50%, 8px);
+  max-width: 420px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: var(--baf-text-main);
+  color: var(--baf-bg);
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 2147483000;
+}
+.baf-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.baf-toast-error { background: #ff4d4f; color: #fff; }
+
+/* ===== 扩展已更新（脚本失联）横幅 ===== */
+.baf-reload-bar {
+  position: fixed;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 90vw;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--baf-bg);
+  border: 1px solid var(--baf-accent-border);
+  color: var(--baf-text-main);
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.16);
+  z-index: 2147483001;
+}
+.baf-reload-bar button {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  background: var(--baf-brand);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.4;
+  font-family: inherit;
+  cursor: pointer;
+}
+.baf-reload-bar button:hover { background: #f55d8a; }
