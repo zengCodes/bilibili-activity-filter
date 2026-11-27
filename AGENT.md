@@ -48,7 +48,7 @@
 - commit 用 `type: 中文描述`，类型就那五个：`feat` `fix` `style` `docs` `chore`。升版的提交把版本号带上
 - 这仓库的 commit 有时会在 `git add` 之前被外部工具抢先建好，导致报 `nothing to commit`。用 `git log origin/main..HEAD` 看一眼，能推就直接 `git push`，别重复提交
 - 商店上传、ScriptCat 更新都由用户自己做。我们只负责产出正确的 zip 和 `user.js`，并告诉他文件在哪
-- 脚本头的 `@updateURL` / `@downloadURL` 走 `ghfast.top` 镜像，是用户端的第二条更新通道（商店那版没跟上时靠它）。别换成裸 `raw.githubusercontent.com`（国内不通），也别用 jsDelivr——`@main` 缓存约 12 小时，版本要等半天才可见。两个地址必须指向同一份内容，否则版本号对不上会反复提示更新
+- 脚本头的 `@updateURL` / `@downloadURL` 走 `gh-proxy.com` 镜像，是用户端的第二条更新通道（商店那版没跟上时靠它）。别换成裸 `raw.githubusercontent.com`（国内不通），也别用 jsDelivr——`@main` 缓存约 12 小时，版本要等半天才可见。`ghfast.top` 实测也带较长缓存（推完 10 分钟仍是旧内容），别再用。两个地址必须指向同一份内容，否则版本号对不上会反复提示更新
 - 仓库目前是公开的（匿名就能打开），但口径不变：不引导别人 clone、提 Issue 或 PR，统一引导到脚本页评论区
 
 ## 6. 对外的话怎么说
